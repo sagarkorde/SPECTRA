@@ -1,0 +1,187 @@
+================================================================================
+SPECTRA — Updated Reference List
+Formatted in IEEEtran numeric citation style (as used by SPECTRA_final.tex),
+ordered by first in-text citation appearance — the order IEEEtran.bst will
+produce when the manuscript is compiled with bibtex.
+================================================================================
+
+[1]  S. Dudani, I. Baggili, D. Raymond, and R. Marchany, "The current state
+     of cryptocurrency forensics," Forensic Sci. Int.: Digit. Investig.,
+     vol. 46, p. 301576, 2023, doi: 10.1016/j.fsidi.2023.301576.
+
+[2]  Z. Chang, Y. Cai, X. F. Liu, Z. Xie, Y. Liu, and Q. Zhan, "Anomalous
+     node detection in blockchain networks based on graph neural networks,"
+     Sensors, vol. 25, no. 1, p. 1, 2025, doi: 10.3390/s25010001.
+
+[3]  R. Tan, Q. Tan, Q. Zhang, P. Zhang, Y. Xie, and Z. Li, "Ethereum fraud
+     behavior detection based on graph neural networks," Computing,
+     vol. 105, no. 10, pp. 2143-2170, 2023, doi: 10.1007/s00607-023-01177-7.
+
+[4]  W. Zhao and H. Chen, "Learning frequency-aware graph fraud detection,"
+     Neural Netw., vol. 198, p. 108600, 2026,
+     doi: 10.1016/j.neunet.2026.108600.
+
+[5]  X. Fan, J. Zhang, and X. Li, "A blockchain-based trust and reputation
+     model resilient to forgery attacks for data sharing scenarios
+     (RWS-BTRM)," Int. J. Inf. Secur., vol. 24, no. 5, p. 205, 2025,
+     doi: 10.1007/s10207-025-01050-y.
+
+[6]  Z. Li and E. He, "Graph neural network-based Bitcoin transaction
+     tracking model," IEEE Access, vol. 11, pp. 62109-62120, 2023,
+     doi: 10.1109/ACCESS.2023.3288026.
+
+[7]  S. Ouyang, Q. Bai, H. Feng, and B. Hu, "Bitcoin money laundering
+     detection via subgraph contrastive learning," Entropy, vol. 26, no. 3,
+     p. 211, 2024, doi: 10.3390/e26030211.
+
+[8]  M. Guang, Z. Li, C. Yan, Y. Xu, J. Wang, D. Cheng, and C. Jiang,
+     "Multi-temporal partitioned graph attention networks for financial
+     fraud detection," IEEE Trans. Inf. Forensics Security, vol. 20,
+     pp. 9399-9412, 2025, doi: 10.1109/TIFS.2025.3607231.
+
+[9]  J. Liu, J. Wu, J. Chen, Y. Cao, and Z. Zheng, "Trans2Graph: Mining
+     Ethereum phishers with graph on heterogeneous temporal transaction
+     data," IEEE Trans. Inf. Forensics Security, vol. 20, pp. 12950-12963,
+     2025, doi: 10.1109/TIFS.2025.3637670.
+
+[10] G. Li, Y. Mi, J. Zhou, X. Zheng, and W. Wu, "Group-based detection of
+     cryptocurrency laundering using multi-persona analysis," IEEE Trans.
+     Inf. Forensics Security, vol. 20, pp. 5992-6004, 2025,
+     doi: 10.1109/TIFS.2025.3575954.
+
+[11] Y. Wang, Q. Zheng, X. Li, L. Wang, and L. Lin, "CoSemiGNN: Blockchain
+     fraud detection with dynamic graph neural networks based on
+     co-association of semi-supervised learning," Expert Syst. Appl.,
+     vol. 298, p. 129853, 2025, doi: 10.1016/j.eswa.2025.129853.
+
+[12] S. Chen, Y. Liu, Q. Zhang, Z. Shao, and Z. Wang, "Multi-distance
+     spatial-temporal graph neural network for anomaly detection in
+     blockchain transactions," Adv. Intell. Syst., vol. 7, no. 8,
+     p. 2400898, 2025, doi: 10.1002/aisy.202400898.
+
+[13] H. Sun, Z. Liu, S. Wang, and H. Wang, "Adaptive attention-based graph
+     representation learning to detect phishing accounts on the Ethereum
+     blockchain," IEEE Trans. Netw. Sci. Eng., vol. 11, no. 3,
+     pp. 2963-2975, 2024, doi: 10.1109/TNSE.2024.3355089.
+
+[14] J. Sun, Y. Jia, Y. Wang, Y. Tian, and S. Zhang, "Ethereum fraud
+     detection via joint transaction language model and graph
+     representation learning," Inf. Fusion, vol. 120, p. 103074, 2025,
+     doi: 10.1016/j.inffus.2025.103074.
+
+[15] Y. Ding, W. Kang, J. Feng, B. Peng, and A. Yang, "Credit card fraud
+     detection based on improved variational autoencoder generative
+     adversarial network," IEEE Access, vol. 11, pp. 83680-83691, 2023,
+     doi: 10.1109/ACCESS.2023.3302339.
+
+[16] H. Zhang, J. Yang, B. Zhang, Y. Tang, W. Du, and B. Wen, "Enhancing
+     generalized spectral clustering with embedding Laplacian graph
+     regularization," CAAI Trans. Intell. Technol., 2024,
+     doi: 10.1049/cit2.12308.
+
+[17] X. Ning, X. Zhao, Y. Fu, and G. Tang, "Attribute graph clustering based
+     on self-supervised spectral embedding network," IEEE Access, vol. 11,
+     pp. 127715-127724, 2023, doi: 10.1109/ACCESS.2023.3331503.
+
+[18] Z. Peng, H. Liu, Y. Jia, and J. Hou, "EGRC-Net: Embedding-induced graph
+     refinement clustering network," IEEE Trans. Image Process., vol. 32,
+     pp. 6457-6468, 2023, doi: 10.1109/TIP.2023.3333557.
+
+[19] X. Zheng, C. Feng, Z. Yin, J. Zhang, and H. Shen, "Research on fraud
+     detection method based on heterogeneous graph representation
+     learning," Electronics, vol. 12, no. 14, p. 3070, 2023,
+     doi: 10.3390/electronics12143070.
+
+[20] J. Yu and A. L. Jia, "AGCL: Adaptive graph contrastive learning for
+     graph representation learning," Neurocomputing, vol. 566, p. 127019,
+     2024, doi: 10.1016/j.neucom.2023.127019.
+
+[21] S. Zhao, C. Xu, Z. Du, Y. Zhang, Z. Duan, and J. Chen, "HireGC:
+     Hierarchical inductive network representation learning via graph
+     coarsening," Knowl.-Based Syst., vol. 311, p. 113058, 2025,
+     doi: 10.1016/j.knosys.2025.113058.
+
+[22] F. Alshameri and R. Xia, "An evaluation of variational autoencoder in
+     credit card anomaly detection," Big Data Min. Anal., vol. 7, no. 3,
+     pp. 718-729, 2024, doi: 10.26599/BDMA.2023.9020035.
+
+[23] S. Guan, Z. He, S. Ma, and M. Gao, "Multivariate time series anomaly
+     detection with variational autoencoder and spatial-temporal graph
+     network," Comput. Secur., vol. 142, p. 103877, 2024,
+     doi: 10.1016/j.cose.2024.103877.
+
+[24] H. Huang, J. Yang, H. Zeng, Y. Wang, and L. Xiao, "Self-organizing
+     maps-assisted variational autoencoder for unsupervised network
+     anomaly detection," Symmetry, vol. 17, no. 4, p. 520, 2025,
+     doi: 10.3390/sym17040520.
+
+[25] L. Fang, W. Wen, and X. Zheng, "FedDCA: Stable and unified Wasserstein
+     adaptation to federated concept drift," Knowl.-Based Syst., vol. 337,
+     p. 115342, 2026, doi: 10.1016/j.knosys.2026.115342.
+
+[26] Q.-T. Tran, N.-A. Le-Khac, and M. Bertolotto, "Concept drift detection
+     in image data stream: A survey on current literature, limitations and
+     future directions," Artif. Intell. Rev., vol. 59, no. 1, p. 33, 2025,
+     doi: 10.1007/s10462-025-11428-y.
+
+[27] D. Shang, G. Zhang, and J. Lu, "Concept drift detection based on radial
+     distance," Neurocomputing, vol. 653, p. 131190, 2025,
+     doi: 10.1016/j.neucom.2025.131190.
+
+[28] S. Ma, H. Liu, X. Jiang, and C. Chen, "A graph-based concept drift
+     detection method for semi-supervised data stream classification,"
+     IEEE Signal Process. Lett., pp. 1-4, 2026,
+     doi: 10.1109/LSP.2026.3712202.
+
+[29] M. A. Shyaa, Z. Zainol, R. Abdullah, M. Anbar, L. Alzubaidi, and
+     J. Santamaria, "Enhanced intrusion detection with data stream
+     classification and concept drift guided by the incremental learning
+     genetic programming combiner," Sensors, vol. 23, no. 7, p. 3736, 2023,
+     doi: 10.3390/s23073736.
+
+[30] Z. Teng, S. Zhu, M. Li, L. Yu, J. Gu, and L. Guo, "Wireless sensor
+     network security defense strategy based on Bayesian reputation
+     evaluation model," IET Commun., vol. 18, no. 1, pp. 55-62, 2024,
+     doi: 10.1049/cmu2.12700.
+
+[31] Z. Liao and S. Cheng, "RVC: A reputation and voting based blockchain
+     consensus mechanism for edge computing-enabled IoT systems," J. Netw.
+     Comput. Appl., vol. 209, p. 103510, 2023,
+     doi: 10.1016/j.jnca.2022.103510.
+
+[32] X. Yang, H. Li, X. Feng, and Z. Jin, "Variable-wise generative
+     adversarial transformer in multivariate time series anomaly
+     detection," Appl. Intell., vol. 53, no. 23, pp. 28745-28767, 2023,
+     doi: 10.1007/s10489-023-05029-x.
+
+[33] C. Wu, H. Cao, J. Chen, X. Yan, G. Xu, Z. Zhao, Y. Liu, and H. Jiang,
+     "RugScreener: Leveraging temporal graph neural network for rugpull
+     detection in DeFi," IEEE Trans. Inf. Forensics Security, vol. 20,
+     pp. 11120-11133, 2025, doi: 10.1109/TIFS.2025.3620669.
+
+[34] S. Uddin and H. Lu, "Confirming the statistically significant
+     superiority of tree-based machine learning algorithms over their
+     counterparts for tabular data," PLoS ONE, vol. 19, no. 4, p. e0301541,
+     2024, doi: 10.1371/journal.pone.0301541.
+
+[35] H.-Y. Yao, C.-Y. Zhang, Z.-L. Yao, C. L. P. Chen, and J. Hu,
+     "A recurrent graph neural network for inductive representation
+     learning on dynamic graphs," Pattern Recognit., vol. 154, p. 110577,
+     2024, doi: 10.1016/j.patcog.2024.110577.
+
+================================================================================
+Journal-quartile note (Scopus / Scimago, most recent available ranking):
+Q1: Forensic Sci. Int.: Digit. Investig.; IEEE Trans. Inf. Forensics
+    Security; Expert Syst. Appl.; Adv. Intell. Syst.; IEEE Trans. Netw.
+    Sci. Eng.; Information Fusion; CAAI Trans. Intell. Technol.;
+    IEEE Trans. Image Process.; Knowledge-Based Systems; Big Data Min.
+    Anal.; Computers & Security; Artificial Intelligence Review;
+    Neurocomputing; J. Netw. Comput. Appl.; Pattern Recognition
+Q2: Sensors; IEEE Access; Computing; Electronics; Symmetry;
+    IEEE Signal Processing Letters; IET Communications
+Q1/Q2 (varies by Scopus subject category): Int. J. Inf. Secur.; Applied
+    Intelligence; PLOS ONE
+
+10 of 35 references are IEEE-published (28.6%), within the requested 5-10
+range at the upper bound.
+================================================================================

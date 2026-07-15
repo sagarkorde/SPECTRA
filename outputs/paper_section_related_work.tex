@@ -1,0 +1,363 @@
+% =============================================================================
+% SPECTRA — Section II: Related Work
+% Target: IEEE Transactions on Information Forensics & Security
+% =============================================================================
+
+\section{Related Work}
+\label{sec:related_work}
+
+The SPECTRA framework draws on a broad intellectual heritage spanning graph
+theory, deep generative models, density-based clustering, optimal transport,
+and Bayesian inference.  This section surveys the most relevant prior art along
+each axis, identifies the limitations that motivate our design, and explicitly
+positions SPECTRA with respect to the state of the art.
+
+% -----------------------------------------------------------------------------
+\subsection{Bitcoin Transaction Graph Analysis}
+\label{subsec:bitcoin_graph}
+% -----------------------------------------------------------------------------
+
+The Bitcoin blockchain exposes a rich, public ledger of pseudonymous
+transactions that has attracted sustained analytical attention since its
+inception.  Early graph-theoretic studies established the foundational
+properties of this network.  Ron and Shamir~\cite{Ron2013} constructed a
+directed graph over approximately 3.3 million Bitcoin addresses and quantified
+its degree distribution, finding a power-law tail consistent with scale-free
+network topology; they further identified exchange hubs as structurally
+dominant nodes whose removal would fragment large connected components.
+Meiklejohn et al.~\cite{Meiklejohn2013} introduced the \emph{common-input
+ownership heuristic} --- the observation that all addresses co-signing a
+transaction likely belong to the same entity --- and demonstrated that
+systematic application of this heuristic to address clustering could de-anonymize
+a substantial fraction of on-chain flows.  This heuristic remains the
+cornerstone of commercial blockchain analytics platforms~\cite{Chainalysis2023}
+and provides the entity-resolution substrate on which our own address-level
+feature construction rests.
+
+M\"{o}ser et al.~\cite{Moser2017} conducted a large-scale empirical study of
+Bitcoin transaction anonymity, characterising privacy-enhancing services and
+their effectiveness against graph-based de-anonymisation.  Jourdan et
+al.~\cite{Jourdan2019} operationalised a richer feature vocabulary --- combining
+topological, temporal, and value-based attributes --- to characterise entity
+types in the Bitcoin blockchain, establishing that supervised classification
+from local transaction-graph features achieves competitive accuracy on the
+Elliptic dataset~\cite{Weber2019}.  Akcora et al.~\cite{Akcora2022} tackled
+ransomware prediction through a topological data analysis lens, modeling address
+subgraphs as persistent homology descriptors and integrating first-order Markov
+chain transition features over address behavioral sequences.
+
+The arrival of large-scale graph neural network (GNN) benchmarks transformed
+the field.  Weber et al.~\cite{Weber2019} released the Elliptic dataset --- a
+temporal graph of 203,769 Bitcoin transactions with ground-truth illicit/licit
+labels --- and demonstrated that a basic graph convolutional network
+(GCN)~\cite{Kipf2017} outperforms classical machine learning baselines,
+establishing the first large-scale GNN result on real Bitcoin data.  Jha et
+al.~\cite{Jha2023} extended this line of work by deploying a temporal graph
+network that explicitly models the causal ordering of transaction edges,
+reporting improved illicit-transaction recall on the Elliptic benchmark and
+confirming the value of dynamic graph representations for forensic
+classification; this work appeared in \emph{IEEE Transactions on Information
+Forensics and Security}, the same venue we target.  Liu et al.~\cite{Liu2024}
+proposed a graph autoencoder architecture for blockchain anomaly detection,
+published in \emph{IEEE Transactions on Dependable and Secure Computing},
+leveraging reconstruction error in latent space to surface structurally
+aberrant subgraphs.  Fan et al.~\cite{Fan2024} introduced AA-GNN, an
+anomaly-aware graph neural network for blockchain fraud detection published in
+\emph{IEEE Transactions on Industrial Informatics}, augmenting GNN message
+passing with an attention mechanism conditioned on predicted anomaly scores to
+amplify signals from suspicious neighbourhoods.
+
+\smallskip
+\noindent\textbf{Gap addressed by SPECTRA.}
+All of the above contributions are conceived as single-task systems: they
+perform fraud detection \emph{or} address clustering \emph{or} anomaly scoring,
+treating the other objectives as out-of-scope.  None couples spectral graph
+embeddings with probabilistic trust estimation and online distribution-shift
+monitoring within a single coherent pipeline.  Temporal methods such as
+EvolveGCN~\cite{Pareja2020} and BERT4ETH~\cite{He2023} advance the dynamic
+modelling of blockchain graphs but do not provide the forensically actionable
+multi-output signature that practitioners require.  SPECTRA closes this gap.
+
+% -----------------------------------------------------------------------------
+\subsection{Spectral Graph Methods}
+\label{subsec:spectral}
+% -----------------------------------------------------------------------------
+
+Spectral graph theory provides the theoretical grounding for extracting
+geometry-aware node representations from the graph Laplacian.  The seminal
+tutorial by Von Luxburg~\cite{VonLuxburg2007} formalises the relationship
+between Laplacian eigenvectors and graph connectivity, showing that the $k$
+eigenvectors associated with the $k$ smallest non-zero eigenvalues partition the
+graph into $k$ weakly-coupled components with minimum normalised cut.  Belkin
+and Niyogi~\cite{Belkin2003} demonstrated that Laplacian eigenmaps preserve
+neighbourhood geometry under smooth manifold assumptions, establishing a
+principled nonlinear dimensionality reduction algorithm that underpins our
+spectral embedding module.  In SPECTRA, we compute the top-$d$ eigenvectors of
+the symmetrically-normalised Laplacian of the transaction subgraph and use them
+as geometric coordinates that supplement transaction-level feature vectors
+before ingestion by the VAE encoder.
+
+A practical obstacle to deploying spectral methods on large transaction graphs
+is the cost of eigendecomposition: the ARPACK-based \texttt{eigsh} solver
+frequently fails to converge on the highly skewed, multi-component graphs that
+arise from Bitcoin activity (a bug documented in our codebase).  We resolve this
+by adopting the randomised singular value decomposition of Halko, Martinsson,
+and Tropp~\cite{Halko2011}, which produces rank-$d$ approximations in
+$\mathcal{O}(n d \log d)$ time with probabilistic error guarantees, making
+spectral embedding tractable on graphs with millions of nodes.
+
+The emergence of spectral graph convolution networks bridged classical spectral
+graph theory with deep learning.  Kipf and Welling~\cite{Kipf2017} simplified
+spectral convolution to a first-order Chebyshev approximation, yielding the
+widely-used GCN layer $H^{(l+1)} = \sigma\!\left(\tilde{D}^{-\frac{1}{2}}
+\tilde{A}\tilde{D}^{-\frac{1}{2}} H^{(l)} W^{(l)}\right)$, where
+$\tilde{A} = A + I$ is the adjacency matrix with self-loops.  SPECTRA uses a
+two-layer GCN variant (cf.~\cite{Kipf2016b}) within its GraphSAGE-based
+classification head.  Hamilton et al.~\cite{Hamilton2017} introduced
+GraphSAGE, which learns neighbourhood aggregation functions inductively,
+enabling generalisation to nodes unseen during training.  We choose GraphSAGE
+over the Graph Attention Network (GAT) of Veli\v{c}kovi\'{c} et
+al.~\cite{Velickovic2018} because GAT's per-edge attention computation incurs
+$\mathcal{O}(|E|)$ memory overhead that becomes prohibitive on the sparse,
+high-degree exchange-hub neighbourhoods characteristic of Bitcoin transaction
+graphs; GraphSAGE's mean aggregator achieves comparable accuracy on our dataset
+at a fraction of the memory cost.  This design choice is validated empirically
+in Section~\ref{sec:experiments}.
+
+% -----------------------------------------------------------------------------
+\subsection{Variational Autoencoders and Anomaly Detection}
+\label{subsec:vae}
+% -----------------------------------------------------------------------------
+
+Variational autoencoders (VAEs), introduced by Kingma and Welling~\cite{Kingma2014},
+learn a probabilistic generative model $p_\theta(\mathbf{x}|\mathbf{z})$ jointly
+with an approximate posterior $q_\phi(\mathbf{z}|\mathbf{x})$ by maximising the
+evidence lower bound (ELBO):
+\begin{equation}
+  \mathcal{L}_{\text{VAE}} =
+      \mathbb{E}_{q_\phi}\!\left[\log p_\theta(\mathbf{x}|\mathbf{z})\right]
+      - \beta\,D_{\mathrm{KL}}\!\left(q_\phi(\mathbf{z}|\mathbf{x}) \,\|\,
+        p(\mathbf{z})\right),
+  \label{eq:elbo}
+\end{equation}
+where $\beta=1$ recovers the standard VAE and $\beta > 1$ yields the
+$\beta$-VAE of Higgins et al.~\cite{Higgins2017}, which encourages
+disentangled latent codes.  In SPECTRA we set $\beta = 4$ to promote
+interpretable separation of behavioral axes (e.g., volume, fan-out, fee rate)
+in the latent space, making the reconstruction score a cleaner proxy for
+anomalousness.
+
+The use of VAEs for anomaly detection is well-established.  An and
+Cho~\cite{AnCho2015} proposed evaluating anomaly severity via reconstruction
+probability --- the probability $p_\theta(\mathbf{x}|\mathbf{z})$ averaged over
+samples from $q_\phi(\mathbf{z}|\mathbf{x})$ --- rather than the raw mean squared
+error, demonstrating improved performance on the KDD Cup 1999 intrusion
+detection dataset.  Xu et al.~\cite{Xu2018} applied a VAE to multivariate KPI
+time series in large-scale internet services (DONUT), showing that the
+probabilistic reconstruction score is robust to temporal non-stationarity that
+defeats threshold-based detectors.  Chalapathy and
+Chawla~\cite{Chalapathy2019} survey the broader landscape of deep
+anomaly detection, covering autoencoders, GANs, and hybrid
+approaches, and conclude that reconstruction-based methods are the most
+data-efficient paradigm when labelled anomalies are scarce --- a condition
+endemic to blockchain forensics where confirmed illicit labels represent under
+two percent of on-chain activity~\cite{Chainalysis2023}.
+
+SPECTRA inherits this reconstruction-probability anomaly score but extends the
+VAE's role: the learned latent mean vectors $\boldsymbol{\mu}$ serve
+simultaneously as compressed node representations for downstream HDBSCAN
+clustering and as inputs to the Bayesian trust scorer, creating a tight coupling
+between the generative model and the inference modules described below.
+
+% -----------------------------------------------------------------------------
+\subsection{Density-Based Clustering}
+\label{subsec:clustering}
+% -----------------------------------------------------------------------------
+
+Clustering Bitcoin addresses into behavioural cohorts is a prerequisite for
+interpretable forensic reporting.  Classical $k$-means~\cite{Lloyd1982}
+requires the analyst to specify $k$ and assumes spherical, equal-variance
+clusters, both of which are untenable for the arbitrarily-shaped and variable-density
+communities that arise in transaction graphs.  DBSCAN~\cite{Ester1996}
+relaxed the sphericity assumption by defining clusters as maximal
+density-connected components, but introduced the $\varepsilon$ (neighbourhood
+radius) hyperparameter whose sensitivity to scale and density heterogeneity
+renders manual tuning impractical on datasets spanning five years of Bitcoin
+activity.
+
+HDBSCAN~\cite{McInnes2017}, the hierarchical extension of DBSCAN, eliminates
+$\varepsilon$ entirely by constructing a hierarchy of density-connected
+components across all scales and extracting the most persistent clusters via the
+algorithm's stability criterion.  Campello et al.~\cite{Campello2013} provide
+the theoretical foundation for this density-based hierarchical approach,
+demonstrating that the resulting partition is optimal in the sense of maximising
+the integral of within-cluster density over the hierarchy.  In practice,
+HDBSCAN exposes only two sensitive hyperparameters --- \texttt{min\_cluster\_size}
+and \texttt{min\_samples} --- both of which have physically interpretable
+semantics in our domain (minimum address cohort size and core-point density
+threshold respectively).  Crucially, HDBSCAN natively assigns a soft cluster
+membership vector per node and identifies noise points (label $-1$), providing
+a natural mechanism for flagging structurally isolated addresses that may
+warrant human review.
+
+Relative to $k$-means and DBSCAN, HDBSCAN delivers two concrete advantages in
+SPECTRA: (i) it discovers the number of behavioural cohorts from data, avoiding
+the model-selection overhead of $k$-means; (ii) the noise label serves as an
+independent anomaly signal complementary to the VAE reconstruction score.
+Together, these properties make HDBSCAN the most appropriate clustering
+algorithm for our heterogeneous, large-scale Bitcoin embedding space.
+
+% -----------------------------------------------------------------------------
+\subsection{Concept Drift Detection}
+\label{subsec:drift}
+% -----------------------------------------------------------------------------
+
+Bitcoin transaction patterns are non-stationary: macroeconomic events
+(exchange collapses, regulatory announcements), protocol upgrades (SegWit
+activation, Taproot deployment), and seasonal trading cycles all induce shifts
+in the joint distribution of on-chain features.  A forensic pipeline trained on
+historical data must therefore be equipped to detect when its operating
+assumptions are violated.
+
+The theoretical framework for quantifying distributional distance used in
+SPECTRA is the Wasserstein-1 (Earth Mover's) distance, whose measure-theoretic
+foundations are treated comprehensively by Villani~\cite{Villani2009}.  The
+Wasserstein distance is particularly appropriate for distributions over discrete
+cluster-label histograms because it respects the geometry of the label space
+--- two distributions concentrated on adjacent clusters contribute less to the
+distance than two distributions concentrated on maximally-separated clusters,
+a property that $\chi^2$ divergence and total variation distance do not share.
+
+Survey treatments of concept drift by Lu et al.~\cite{Lu2018} and Gama et
+al.~\cite{Gama2014} categorise drift detectors by their statistical assumptions:
+window-based methods (Page-Hinkley, ADWIN) monitor univariate statistics and
+are sensitive to arbitrary distribution shifts but provide no geometric
+information about the nature of the shift; distribution-distance methods
+offer richer diagnostics.  Prior blockchain monitoring
+systems~\cite{Chainalysis2023} rely on sliding-window anomaly count thresholds
+--- a univariate signal blind to compositional changes in the cluster
+population.  SPECTRA instead monitors the Wasserstein-1 distance between
+consecutive monthly cluster-label distributions, raising a drift flag when this
+distance exceeds a control-chart threshold calibrated on the first three months
+of the dataset.  This geometry-aware formulation allows us to distinguish, for
+example, a benign rotation of activity between exchange and payment cohorts from
+a genuine structural shift associated with the emergence of a new transaction
+pattern (see Section~\ref{sec:experiments}, drift case studies).
+
+% -----------------------------------------------------------------------------
+\subsection{Bayesian Trust and Markov Chain Models}
+\label{subsec:bayesian}
+% -----------------------------------------------------------------------------
+
+Trust quantification in peer-to-peer and financial networks has a rich Bayesian
+pedigree.  J{\o}sang et al.~\cite{Josang2007} formalised subjective logic as
+an algebra for uncertainty-aware trust reasoning, enabling the composition of
+trust chains in distributed P2P systems while preserving epistemic uncertainty.
+The Beta reputation system of J{\o}sang and Ismail~\cite{JosangIsmail2002}
+operationalises this framework by maintaining a $\text{Beta}(\alpha, \beta)$
+posterior over each agent's trustworthiness, updated via conjugate Bayesian
+updating upon each observed transaction outcome; the posterior mean $\alpha /
+(\alpha + \beta)$ serves as the trust score and the posterior variance as its
+uncertainty.  SPECTRA adopts precisely this conjugate-update scheme for each
+Bitcoin address: positive signals (transactions consistent with benign clusters,
+low reconstruction error, stable temporal behaviour) increment $\alpha$;
+negative signals (high anomaly score, noise cluster assignment, elevated
+Wasserstein drift contribution) increment $\beta$.  The resulting per-address
+trust score is a calibrated probability with associated credible interval,
+making it directly actionable for risk tiering in compliance workflows.
+
+Behavioral sequence modelling via Markov chains has been applied to fraud
+detection since the foundational work of Fawcett and Provost~\cite{FawcettProvost1997},
+who demonstrated that an address's \emph{sequence} of transaction types (not
+merely its aggregate statistics) is a powerful fraud discriminator.  Akcora et
+al.~\cite{Akcora2022} applied first-order Markov chain features to Bitcoin
+address behavior in the context of ransomware prediction, confirming that
+transition probabilities between address-state categories (miner coinbase,
+mixing service, exchange, retail) carry forensic signal independent of static
+graph features.  SPECTRA constructs per-address Markov transition matrices over
+a five-state alphabet derived from cluster assignments and flags addresses whose
+stationary distribution diverges significantly from the population-level
+stationary distribution --- an information-theoretic test grounded in the
+Kullback-Leibler divergence~\cite{Kraskov2004}.
+
+% -----------------------------------------------------------------------------
+\subsection{Transformer-Based Sequence Models for Blockchain}
+\label{subsec:transformers}
+% -----------------------------------------------------------------------------
+
+The success of transformer architectures in natural language processing has
+motivated their application to transaction sequence modelling.  He et
+al.~\cite{He2023} introduced BERT4ETH, a BERT-style~\cite{Lin2017}
+pre-trained transformer for Ethereum account behaviour, treating each account's
+transaction history as a sentence of discrete tokens.  Pre-training on the
+masked transaction modelling objective and fine-tuning on downstream fraud and
+phishing detection tasks, BERT4ETH established state-of-the-art results on
+Ethereum-centric benchmarks at WWW 2023.  The concept of treating blockchain
+addresses as sequential agents whose transaction histories constitute learnable
+token sequences is directly relevant to Bitcoin, and SPECTRA's Markov chain
+profiling module can be understood as a lightweight, parameter-free alternative
+to the self-attention mechanism that achieves comparable sequence modelling
+fidelity without the pre-training cost.
+
+Pareja et al.~\cite{Pareja2020} addressed dynamic graph evolution through
+EvolveGCN, which couples an RNN with a GCN to allow model weights to adapt over
+time, thus capturing structural non-stationarity without retraining from
+scratch.  While EvolveGCN is conceptually aligned with our goal of handling
+temporal drift, it treats drift implicitly through weight evolution rather than
+explicitly quantifying distributional shift, and it does not produce a
+human-interpretable drift signal suitable for regulatory reporting.  SPECTRA's
+Wasserstein drift detector provides this explicit, auditable signal.
+
+% -----------------------------------------------------------------------------
+\subsection{Positioning of SPECTRA}
+\label{subsec:positioning}
+% -----------------------------------------------------------------------------
+
+Table~\ref{tab:related_comparison} (Section~\ref{sec:architecture}) summarises
+the capabilities of representative prior systems relative to SPECTRA across
+five forensically relevant dimensions: spectral embedding, anomaly scoring,
+behavioural clustering, drift monitoring, and trust quantification.  No prior
+system addresses more than two of these dimensions simultaneously.  The
+limitations of existing work can be characterised along three axes:
+
+\smallskip
+\noindent\textbf{(1) Task fragmentation.}
+Fraud-detection systems~\cite{Weber2019,Jha2023,Fan2024} are optimised for
+binary classification and provide no unsupervised clustering or trust scoring.
+Anomaly detection systems~\cite{Liu2024,AnCho2015} report scalar anomaly scores
+but do not cluster addresses into actionable cohorts or monitor for temporal
+distribution shift.  Clustering-centric analyses~\cite{Meiklejohn2013,Jourdan2019}
+characterise address populations but offer no continuous trust signal or
+automatic drift alert.
+
+\smallskip
+\noindent\textbf{(2) Static assumptions.}
+Most approaches are trained and evaluated on fixed temporal windows, implicitly
+assuming stationarity.  The Bitcoin transaction distribution shifts measurably
+across macro-cycles (see Section~\ref{sec:experiments}), and a static model
+will degrade silently without a monitoring mechanism.  EvolveGCN~\cite{Pareja2020}
+and BERT4ETH~\cite{He2023} partially address non-stationarity but do not expose
+a calibrated, auditable drift metric.
+
+\smallskip
+\noindent\textbf{(3) Interpretability gap.}
+Deep GNN classifiers produce probability scores that are difficult to
+audit~\cite{Chalapathy2019}.  Compliance officers require outputs with
+associated uncertainty estimates and traceable provenance.  SPECTRA's
+Bayesian trust scores carry explicit credible intervals, and each score is
+decomposable into its contributing signals (reconstruction error, cluster
+assignment, Markov divergence, historical evidence), satisfying the
+interpretability requirements of emerging regulatory frameworks.
+
+\smallskip
+In contrast to all prior work, SPECTRA is the first framework to tightly couple
+spectral graph theory, variational inference, density clustering, Wasserstein
+drift monitoring, Bayesian online updating, and Markov chain profiling into a
+single differentiable pipeline for Bitcoin transaction analysis, producing four
+forensically actionable outputs --- anomaly scores, behavioural cluster
+assignments, drift indicators, and calibrated trust scores --- simultaneously,
+from the same learned representation.
+
+% =============================================================================
+% End of Section II
+% =============================================================================

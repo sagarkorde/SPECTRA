@@ -1,0 +1,133 @@
+% =============================================================================
+%  SPECTRA — Paper Section Draft
+%  Label Provenance & Evaluation Methodology
+%  Target: IEEE Transactions on Information Forensics & Security
+%  Author: Sagar Korde
+% =============================================================================
+%
+%  INSERT this block inside Section V (Experimental Evaluation),
+%  as a subsection before Table I (Baseline Comparison).
+% =============================================================================
+
+% ─── V-B  Label Provenance and Evaluation Methodology ────────────────────────
+
+\subsection{Label Provenance and Evaluation Methodology}
+\label{subsec:label_provenance}
+
+\subsubsection{Dataset and Transaction Type Labels}
+We evaluate on the CryptoGraphNet dataset~\cite{cryptographnet2024}, which contains
+\num{300000} stratified Bitcoin transactions sampled across six mutually exclusive
+transaction types: Standard, Peer-to-Peer (P2P), Consolidation, Distribution,
+Batch-Payment, and CoinJoin-like.
+The six class labels are assigned via deterministic heuristics applied to
+structural transaction attributes---specifically, the number of distinct input
+and output addresses, value concentration ratios, and fee-rate patterns.
+For example, a \emph{Consolidation} transaction is defined as one with
+$|\mathit{inputs}| \geq 3$ and $|\mathit{outputs}| = 1$, while a
+\emph{Batch-Payment} requires $|\mathit{outputs}| \geq 5$~\cite{cryptographnet2024}.
+
+\subsubsection{Label--Feature Entanglement}
+This construction introduces a structural entanglement between labels and tabular
+features: because the class membership rules are algebraic functions of
+$|\mathit{inputs}|$, $|\mathit{outputs}|$, and value statistics, any model
+that observes these raw tabular features can reconstruct the labels
+with near-perfect accuracy without learning any generalizable behavioral
+pattern.
+Table~\ref{tab:fair_baselines} confirms this: XGBoost and
+BERT4ETH-BTC both achieve $\text{F}_1 = 1.000$ on the original feature set.
+Critically, this degeneracy \emph{persists even after temporal identifiers
+are removed} (Table~\ref{tab:fair_baselines}, ``fair'' columns), because
+the definitive features are transaction-structural, not temporal.
+
+We emphasize that this is a property of the benchmark's label-generation
+procedure---a known limitation of rule-based annotation common to
+blockchain datasets~\cite{Jourdan2019,Akcora2022}---and not an indication
+of model overfitting.
+We report tabular-classifier results for completeness per IEEE TIFS
+reproducibility requirements, and clearly distinguish them from the
+more informative \emph{graph-topology} track discussed below.
+
+\subsubsection{Two-Track Evaluation Protocol}
+To provide a rigorous and interpretable comparison, we partition all methods
+into two evaluation tracks:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{T\arabic*}]
+
+  \item \textbf{Tabular-feature classifiers} (XGBoost, BERT4ETH-BTC).
+    These methods receive the full per-transaction feature vector
+    $\mathbf{x} \in \mathbb{R}^{20}$ selected by Mutual Information ranking.
+    Because $\mathbf{x}$ includes $|\mathit{inputs}|$, $|\mathit{outputs}|$,
+    and value statistics from which the labels are derived, their accuracy
+    constitutes an \emph{upper-bound oracle} rather than a practically
+    meaningful measure of fraud-detection capability.
+
+  \item \textbf{Graph-topology methods} (SPECTRA, EvolveGCN, AA-GNN,
+    clustering baselines).
+    These methods operate exclusively on the address-level transaction graph
+    $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{W})$ and/or the
+    spectral node embedding $\boldsymbol{\Phi} \in \mathbb{R}^{|\mathcal{V}| \times k}$
+    derived from the graph Laplacian.
+    Raw structural features ($|\mathit{inputs}|$, $|\mathit{outputs}|$) are
+    \emph{not} directly available to these methods; the graph topology
+    encodes them only implicitly through node degree distributions.
+    This track constitutes the \emph{meaningful} comparison and is the
+    focus of SPECTRA's contribution claims.
+
+\end{enumerate}
+
+\subsubsection{Temporally-Fair Feature Set}
+Independent of the two-track split, we additionally ablate temporal
+identifier features.
+In Bitcoin's ledger, \texttt{block\_height} and \texttt{block\_time}
+are monotonically increasing proxies for calendar time.
+Because different transaction types were prevalent at different epochs
+of Bitcoin's adoption curve (e.g., CoinJoin-like transactions became
+common only after 2017, and batch payments correlate with exchange activity
+peaks in 2020--2021), a model with access to these fields can exploit
+distributional shift rather than structural features.
+We therefore define a \emph{temporally-fair} feature set
+$\mathbf{x}^{\dagger}$ by removing \texttt{block\_height},
+\texttt{block\_time}, and \texttt{year}, then re-selecting the top-20
+features by Mutual Information on the remaining columns.
+All results are reported for both the original set $\mathbf{x}$ and
+the fair set $\mathbf{x}^{\dagger}$ in Table~\ref{tab:combined_comparison}.
+Cyclical time features (\texttt{hour}, \texttt{day\_of\_week},
+\texttt{week\_of\_year}) are retained, as they reflect genuine
+user-activity rhythms~\cite{Ron2013} rather than temporal identity.
+
+\subsubsection{Why SPECTRA Is Inherently Temporally Fair}
+SPECTRA's GNN component (Module~R) receives node features
+$\mathbf{h}_v \in \mathbb{R}^{d}$ constructed from:
+(i) spectral graph embeddings $\boldsymbol{\phi}_v$ (Laplacian eigenvectors),
+(ii) address-level behavioral statistics (fan-in ratio, transaction velocity,
+average received/sent value, inter-transaction gap),
+(iii) VAE-derived latent coordinates $\mathbf{z}_v$,
+(iv) Bayesian trust score $\tau_v$, and
+(v) Markov chain anomaly score $\gamma_v$.
+None of these quantities encodes absolute blockchain time or block height.
+SPECTRA's classification results therefore belong unambiguously to Track~T2
+and are directly comparable with EvolveGCN and AA-GNN without any
+temporal-fairness correction.
+
+% ─── References used above (add to bibliography) ─────────────────────────────
+%
+%  \bibitem{cryptographnet2024}
+%    Author(s), ``CryptoGraphNet: A Labeled Bitcoin Transaction Graph Dataset,''
+%    [Online]. Available: [URL]. 2024.
+%
+%  \bibitem{Jourdan2019}
+%    M.~Jourdan, S.~Blandin, L.~Wynter, and P.~Deshpande,
+%    ``Characterizing entities in the Bitcoin blockchain,''
+%    in \textit{Proc. IEEE Int. Conf. Data Mining Workshops (ICDMW)}, 2019.
+%
+%  \bibitem{Akcora2022}
+%    C.~G.~Akcora, Y.~Li, Y.~R.~Gel, and M.~Kantarcioglu,
+%    ``BitcoinHeist: Topological Data Analysis for Ransomware Prediction
+%    on the Bitcoin Blockchain,''
+%    in \textit{Proc. IJCAI}, 2022, pp.~4439--4445.
+%
+%  \bibitem{Ron2013}
+%    D.~Ron and A.~Shamir,
+%    ``Quantitative Analysis of the Full Bitcoin Transaction Graph,''
+%    in \textit{Proc. Financial Cryptography and Data Security (FC)}, 2013,
+%    pp.~6--24.

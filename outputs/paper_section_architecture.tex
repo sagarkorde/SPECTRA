@@ -1,0 +1,700 @@
+% =============================================================================
+%  SPECTRA — Section IV: The SPECTRA Framework
+%  Target: IEEE Transactions on Information Forensics & Security
+%  Author: Sagar Korde
+%
+%  Required packages (add to preamble):
+%    \usepackage{algorithm}
+%    \usepackage{algpseudocode}
+%    \usepackage{amsmath,amssymb,bm}
+%    \usepackage{siunitx}
+%    \usepackage{booktabs}
+%    \usepackage{graphicx}
+% =============================================================================
+
+\section{The SPECTRA Framework}
+\label{sec:framework}
+
+\textsc{SPECTRA} is a seven-module pipeline that transforms a raw Bitcoin
+transaction graph into per-address trust certificates, anomaly flags, and
+multi-class transaction-type predictions.
+Fig.~\ref{fig:architecture} gives a high-level view of the pipeline;
+Algorithm~\ref{alg:spectra} provides the unified pseudocode.
+Each module is designed to be independently replaceable while maintaining
+well-defined input/output interfaces, enabling ablation and incremental
+deployment in live blockchain-monitoring systems.
+The modules are named by the letters of the \textsc{SPECTRA} acronym:
+\textbf{S}pectral graph construction,
+information-theoretic f\textbf{E}ature ranking,
+\textbf{C}lustering via VAE and HDBSCAN,
+Bayesian \textbf{P}robabilistic trust scoring,
+Markov-chain \textbf{T}ransaction profiling,
+GraphSAGE \textbf{R}ecognition, and
+\textbf{A}nomaly and drift integration.
+Table~\ref{tab:module_summary} summarizes the inputs, outputs, and key
+hyperparameters of each module.
+
+% ---------------------------------------------------------------------------
+\begin{figure}[t]
+  \centering
+  % Replace the following rule with \includegraphics[width=\columnwidth]{figures/spectra_architecture.pdf}
+  \rule{\columnwidth}{0.4pt}\\[2ex]
+  \textit{[Architecture diagram: seven modules (S$\to$E$\to$C$\to$P$\to$T$\to$R$\to$A)
+  shown as a left-to-right pipeline. Module~S receives the raw transaction
+  graph and emits node embeddings; Module~E selects and ranks features;
+  Module~C produces cluster assignments and latent codes; Modules~P and~T
+  run in parallel to generate per-address trust scores and Markov anomaly
+  scores respectively; Module~R fuses all representations for classification;
+  Module~A issues anomaly flags and drift alerts. Data flows are depicted as
+  directed arrows; feedback from Module~A to Module~C is shown as a dashed
+  arc representing the Wasserstein drift monitor.]}\\[2ex]
+  \rule{\columnwidth}{0.4pt}
+  \caption{High-level architecture of \textsc{SPECTRA}.
+    Seven modules process the Bitcoin transaction graph sequentially.
+    Intermediate representations (spectral embeddings, VAE latent codes,
+    cluster assignments, trust scores, and Markov anomaly scores) are
+    concatenated to form the input feature vector for the GraphSAGE
+    classifier (Module~R).
+    The Wasserstein drift monitor in Module~A closes the feedback loop
+    by triggering retraining alerts when the cluster-label distribution
+    shifts beyond threshold $\delta=0.1$.}
+  \label{fig:architecture}
+\end{figure}
+% ---------------------------------------------------------------------------
+
+% ---------------------------------------------------------------------------
+\subsection{Module S — Spectral Graph Construction}
+\label{sec:module_s}
+
+\paragraph{Graph construction.}
+The input to \textsc{SPECTRA} is a directed weighted multi-graph
+$\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{W})$ derived from the
+CryptoGraphNet dataset~\cite{cryptographnet}.
+After parsing \num{300000} transactions we obtain
+$|\mathcal{V}| = \num{2870000}$ address nodes and
+$|\mathcal{E}| = \num{28600000}$ directed edges, where each edge weight
+$w_{ij}$ equals the total BTC transferred from address $i$ to address $j$
+across all co-occurring transactions.
+The full graph is memory-intractable for spectral decomposition, so we prune
+to the top-\num{30000} nodes ranked by weighted in-degree, retaining the
+high-connectivity hub addresses that dominate the structural signal: exchange
+hot wallets, mining pool payout addresses, and mixing-service intermediaries.
+This degree-based pruning preserves the densest subgraph while reducing
+computational cost by three orders of magnitude with negligible information
+loss, since Bitcoin value flow is highly skewed~\cite{kondor2014rich}.
+
+\paragraph{Normalized Laplacian.}
+Let $\mathbf{A} \in \mathbb{R}^{N \times N}$ (with $N = \num{30000}$) be the
+symmetrized adjacency matrix of the pruned subgraph and
+$\mathbf{D} = \mathrm{diag}(d_1, \ldots, d_N)$ the corresponding degree
+matrix.
+We compute the symmetric normalized Laplacian
+\begin{equation}
+  \mathbf{L}_{\mathrm{sym}}
+    = \mathbf{I} - \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2},
+  \label{eq:lsym}
+\end{equation}
+whose eigenvalue spectrum is bounded in $[0, 2]$, facilitating stable
+gradient flow in downstream modules.
+
+\paragraph{Spectral embeddings via randomized SVD.}
+We extract the $k = 10$ eigenvectors corresponding to the $k$ smallest
+non-trivial eigenvalues of $\mathbf{L}_{\mathrm{sym}}$ as the spectral node
+embedding $\mathbf{U} \in \mathbb{R}^{N \times k}$.
+Classical ARPACK-based eigensolvers exhibit convergence instabilities on the
+highly irregular degree distributions of real-world Bitcoin graphs (Zipfian
+degree law with exponent $\approx 1.8$), manifesting as oscillating residuals
+and occasional non-convergence beyond $k = 6$.
+We therefore employ randomized SVD~\cite{halko2011finding} as implemented in
+\texttt{sklearn.utils.extmath.randomized\_svd}, with
+\texttt{n\_iter}$= 10$ power iterations and
+\texttt{n\_oversamples}$= 20$ to control approximation error.
+This yields a deterministic, convergent embedding at a fraction of the memory
+footprint of a full dense eigendecomposition.
+
+The spectral embedding $\mathbf{U}$ captures community structure: nodes
+embedded close together in the spectral domain are highly likely to belong
+to the same graph community~\cite{luxburg2007tutorial}, providing a
+continuous cluster membership signal before any explicit clustering is
+performed.
+
+\paragraph{Behavioral feature augmentation.}
+Six address-level behavioral features are appended to each spectral embedding:
+total transaction count, mean transaction value, value standard deviation,
+active lifespan in blocks, in-degree, and out-degree.
+These features encode individual address patterns that are not captured by
+community structure alone—a mixing service and an exchange may occupy similar
+spectral positions yet differ markedly in transaction rhythm and value
+variance.
+The final node feature matrix is
+$\mathbf{X}_{\mathrm{node}} \in \mathbb{R}^{N \times 16}$,
+where $N = \num{30000}$ and the 16 dimensions comprise 10 spectral
+components and 6 behavioral features.
+
+% ---------------------------------------------------------------------------
+\subsection{Module E — Information-Theoretic Feature Ranking}
+\label{sec:module_e}
+
+Module~E operates on the per-transaction feature matrix
+$\mathbf{X}_{\mathrm{tx}} \in \mathbb{R}^{M \times F}$ (with
+$M = \num{300000}$ transactions and $F$ raw features) and selects the most
+informative feature subset for downstream learning, guarding against
+redundancy and dimensionality inflation.
+
+\paragraph{Shannon entropy screening.}
+For each feature $X_j$ we compute the marginal Shannon entropy
+\begin{equation}
+  H(X_j) = -\sum_{x \in \mathcal{X}_j} p(x)\log_2 p(x),
+  \label{eq:entropy}
+\end{equation}
+where $p(x)$ is estimated via histogram binning with Freedman--Diaconis
+bandwidth.
+Features with $H(X_j) < \epsilon_H$ (empirically $0.1$ bits) are discarded
+as near-constant and carry no discriminative information.
+
+\paragraph{Mutual information ranking.}
+Mutual information between each surviving feature $X_j$ and the transaction
+type label $Y$ is estimated as
+\begin{equation}
+  I(X_j;\, Y) = H(Y) - H(Y \mid X_j),
+  \label{eq:mi}
+\end{equation}
+via the $k$-nearest-neighbor estimator~\cite{ross2014mutual} implemented in
+\texttt{sklearn.feature\_selection.mutual\_info\_classif}.
+Table~\ref{tab:mi_top20} lists the top-20 features by $I(X_j; Y)$.
+Structural sizing features dominate: \texttt{weight} ($I = 1.320$),
+\texttt{vsize} ($I = 1.204$), and \texttt{size} ($I = 1.193$) reflect
+SegWit adoption patterns strongly correlated with transaction type.
+Fee-related features (\texttt{fee\_rate\_sat\_per\_byte} $I = 0.494$,
+\texttt{fee} $I = 0.471$) provide complementary signal tied to sender
+urgency and mixing behavior.
+We retain the top-20 features by $I(X_j; Y)$ as the transaction feature
+vector $\mathbf{x}_{\mathrm{tx}} \in \mathbb{R}^{20}$.
+
+\paragraph{NMF latent decomposition.}
+To further compress the feature space and extract parts-based latent factors,
+we apply Non-negative Matrix Factorization (NMF) with
+$r = 10$ components, regularization coefficients
+$\alpha_W = 0.1$ and $\ell_1$-ratio $= 0.5$
+(elastic-net penalty on $\mathbf{W}$):
+\begin{equation}
+  \min_{\mathbf{W} \geq 0,\, \mathbf{H} \geq 0}
+    \bigl\|\mathbf{X} - \mathbf{W}\mathbf{H}\bigr\|_F^2
+    + \alpha_W \bigl[(1 - \ell_1)\tfrac{1}{2}\|\mathbf{W}\|_F^2
+                    + \ell_1 \|\mathbf{W}\|_1\bigr].
+  \label{eq:nmf}
+\end{equation}
+The Frobenius reconstruction error at convergence is $\num{1051.4}$,
+confirming that $r = 10$ factors capture the dominant co-occurrence structure
+in the top-20 feature block.
+The NMF embedding $\mathbf{h} \in \mathbb{R}^{10}$ is concatenated with
+$\mathbf{x}_{\mathrm{tx}}$ for input to Module~C.
+
+% ---------------------------------------------------------------------------
+\subsection{Module C — VAE and HDBSCAN Clustering}
+\label{sec:module_c}
+
+Module~C constructs a probabilistic latent space over transaction feature
+vectors, enabling principled anomaly scoring and density-based clustering
+that is robust to the class imbalance and irregular cluster shapes
+characteristic of blockchain data.
+
+\paragraph{Variational Autoencoder.}
+The VAE encoder
+$q_\phi(\mathbf{z} \mid \mathbf{x}) = \mathcal{N}(\boldsymbol{\mu}_\phi(\mathbf{x}),\,
+\mathrm{diag}(\boldsymbol{\sigma}^2_\phi(\mathbf{x})))$
+maps each transaction feature vector to a Gaussian distribution in latent
+space $\mathcal{Z} = \mathbb{R}^{32}$.
+The encoder uses fully connected layers with hidden dimensions $[128, 64]$
+and dropout rate $0.2$; the decoder mirrors this architecture symmetrically.
+The model is trained by maximizing the Evidence Lower BOund (ELBO):
+\begin{equation}
+  \mathcal{L}_{\mathrm{ELBO}}
+    = \mathbb{E}_{q_\phi}\bigl[\log p_\theta(\mathbf{x} \mid \mathbf{z})\bigr]
+      - \beta_{\mathrm{KL}}\,
+        D_{\mathrm{KL}}\!\bigl(q_\phi(\mathbf{z} \mid \mathbf{x})
+                               \;\|\; p(\mathbf{z})\bigr),
+  \label{eq:elbo}
+\end{equation}
+with $\beta_{\mathrm{KL}} = 1.0$ (standard VAE) and isotropic Gaussian prior
+$p(\mathbf{z}) = \mathcal{N}(\mathbf{0}, \mathbf{I})$.
+Training proceeds for 50 epochs with batch size 512 and Adam
+optimizer~\cite{kingma2014adam} (learning rate $0.001$).
+Early stopping on the validation ELBO yields the best checkpoint at validation
+loss $0.2216$.
+The per-sample reconstruction error
+$r(\mathbf{x}) = \|\mathbf{x} - \hat{\mathbf{x}}\|_2$
+serves as the primary anomaly score in Module~A.
+
+\paragraph{HDBSCAN density clustering.}
+The VAE mean embedding $\boldsymbol{\mu}_\phi(\mathbf{x})$ is passed to
+Hierarchical DBSCAN (HDBSCAN)~\cite{campello2013density} with
+\texttt{min\_cluster\_size}$= 100$ and \texttt{min\_samples}$= 10$
+under Euclidean metric.
+HDBSCAN is preferred over $k$-means or Gaussian Mixture Models for three
+reasons: (i) it discovers clusters of arbitrary shape in the latent manifold;
+(ii) it explicitly models noise points rather than forcing them into the
+nearest cluster; and (iii) its soft cluster membership probabilities are
+available for downstream weighting.
+The procedure yields \textbf{135 clusters} and
+\num{63390} noise points (\SI{21.1}{\percent} of the corpus), with
+normalized mutual information $\mathrm{NMI} = 0.112$ against the ground-truth
+transaction-type labels—a meaningful signal given that clusters are learned
+purely from graph topology and feature distributions, not label supervision.
+
+\paragraph{Wasserstein temporal drift monitoring.}
+To detect distributional shift in the transaction stream we partition
+transactions into 30 consecutive monthly windows and compute the
+Wasserstein-$1$ distance~\cite{villani2008optimal} between the cluster-label
+distributions of adjacent windows:
+\begin{equation}
+  W_1(\mu_t, \mu_{t+1})
+    = \inf_{\gamma \in \Gamma(\mu_t, \mu_{t+1})}
+        \int \|c - c'\| \, d\gamma(c, c'),
+  \label{eq:w1}
+\end{equation}
+where $\mu_t$ is the empirical cluster-assignment distribution in window $t$.
+A drift alert is raised whenever $W_1(\mu_t, \mu_{t+1}) > \delta = 0.1$.
+Across the 29 adjacent window pairs, all 29 pairs trigger the alert, with
+$W_1$ scores ranging from $0.179$ to $50.745$, indicating substantial and
+sustained distributional shift in Bitcoin transaction patterns over the
+study period.
+This persistent drift motivates SPECTRA's modular architecture: Module~C can
+be periodically retrained in isolation without disrupting the other modules.
+
+% ---------------------------------------------------------------------------
+\subsection{Module P — Bayesian Trust Scoring}
+\label{sec:module_p}
+
+Module~P maintains a per-address trust score that is updated online as new
+transactions are observed, providing a continuous and interpretable
+credibility metric for each blockchain participant.
+
+\paragraph{Beta-Bernoulli model.}
+For each address $v$ we maintain a Beta posterior over the latent trust
+parameter $\tau_v \in [0,1]$:
+\begin{equation}
+  p(\tau_v \mid \mathcal{D}_v)
+    = \mathrm{Beta}\!\left(\alpha_v,\, \beta_v\right),
+  \label{eq:beta_posterior}
+\end{equation}
+initialized with the weakly informative prior
+$\mathrm{Beta}(2, 2)$ (mean $= 0.5$, mode at $0.5$, unimodal).
+This prior encodes epistemic humility: absent any observed transactions, all
+addresses are considered equally trustworthy.
+
+\paragraph{Online posterior update.}
+Upon observing transaction $\mathbf{x}$ at address $v$, the likelihood
+of \emph{trustworthy behavior} is defined as
+\begin{equation}
+  \ell(\mathbf{x}) = \exp\!\bigl(-r(\mathbf{x})\bigr),
+  \quad r(\mathbf{x}) = \|\mathbf{x} - \hat{\mathbf{x}}\|_2,
+  \label{eq:likelihood}
+\end{equation}
+where $r(\mathbf{x})$ is the VAE reconstruction error from Module~C.
+Low reconstruction error implies that the transaction conforms to the learned
+distribution of typical activity for addresses in its cluster—high fidelity
+behavior earns high trust.
+The Beta parameters are updated via conjugate closed-form update:
+\begin{equation}
+  \alpha_v \leftarrow \alpha_v + \ell(\mathbf{x}), \quad
+  \beta_v  \leftarrow \beta_v  + 1 - \ell(\mathbf{x}).
+  \label{eq:beta_update}
+\end{equation}
+The posterior mean $\hat{\tau}_v = \alpha_v / (\alpha_v + \beta_v)$
+is reported as the trust certificate $\tau_v$.
+
+\paragraph{Population statistics.}
+Across the \num{30000} hub addresses, the population trust distribution has
+mean $\mu_\tau = 0.634$ and standard deviation $\sigma_\tau = 0.105$.
+The right-skewed distribution—with a long low-trust tail—reflects the
+Bitcoin ecosystem: a majority of addresses exhibit predictable, repetitive
+behavioral patterns (exchange hot wallets reusing identical fee structures)
+while a minority show highly variable, high-entropy activity consistent
+with mixing or layering behavior.
+
+% ---------------------------------------------------------------------------
+\subsection{Module T — Markov Chain Behavioral Profiling}
+\label{sec:module_t}
+
+Module~T models the cluster-state trajectory of each address as a discrete
+Markov chain, capturing behavioral patterns that unfold over sequences of
+transactions rather than in individual events.
+
+\paragraph{State space and transition estimation.}
+The state space $\mathcal{S}$ consists of the $C = 135$ HDBSCAN cluster
+labels plus one absorbing noise state, giving $|\mathcal{S}| = 136$.
+From $\num{55678}$ multi-transaction address sequences we estimate the
+maximum-likelihood transition matrix
+$\mathbf{P} \in \mathbb{R}^{136 \times 136}$, where
+\begin{equation}
+  P_{ij} = \frac{n_{ij} + \varepsilon}{\sum_{j'} (n_{ij'} + \varepsilon)},
+  \quad \varepsilon = 10^{-6},
+  \label{eq:markov_transition}
+\end{equation}
+with $n_{ij}$ the observed count of transitions from state $i$ to state $j$
+and $\varepsilon = 10^{-6}$ Laplace smoothing to avoid zero-probability
+transitions for unobserved pairs.
+The stationary distribution $\boldsymbol{\pi} = [\pi_1, \ldots, \pi_{136}]$
+is computed via power iteration with tolerance $10^{-8}$.
+
+\paragraph{Transition anomaly scoring.}
+The anomaly score for a single transition $s_{t-1} \to s_t$ is the negative
+log transition probability:
+\begin{equation}
+  \mathrm{score}(s_{t-1}, s_t) = -\log P_{s_{t-1}, s_t}.
+  \label{eq:markov_score}
+\end{equation}
+High scores flag rare—and therefore anomalous—behavioral transitions, such as
+an address that consistently transacts within one cluster (e.g., exchange
+deposit cluster) suddenly appearing in the mixing-service cluster.
+Across all observed transitions the population mean anomaly score is
+$\bar{m} = 0.875$; Module~A flags an address if its per-transition score
+exceeds $\bar{m} + 2\sigma_m$.
+
+% ---------------------------------------------------------------------------
+\subsection{Module R — GraphSAGE Transaction Recognition}
+\label{sec:module_r}
+
+Module~R performs multi-class transaction-type classification using a
+two-layer GraphSAGE network~\cite{hamilton2017inductive} that aggregates
+neighborhood information from the Bitcoin address graph.
+
+\paragraph{Input feature concatenation.}
+The input feature vector for address node $v$ is assembled as
+\begin{equation}
+  \mathbf{f}_v =
+    \bigl[\,
+      \mathbf{u}_v \;\|\;
+      \boldsymbol{\mu}_v \;\|\;
+      \tau_v \;\|\;
+      m_v \;\|\;
+      \mathbf{e}_v
+    \,\bigr]
+    \in \mathbb{R}^{d_f},
+  \label{eq:feat_concat}
+\end{equation}
+where $\mathbf{u}_v \in \mathbb{R}^{16}$ is the spectral-behavioral embedding
+from Module~S, $\boldsymbol{\mu}_v \in \mathbb{R}^{32}$ is the VAE latent
+mean from Module~C, $\tau_v \in \mathbb{R}$ is the Bayesian trust score from
+Module~P, $m_v \in \mathbb{R}$ is the Markov anomaly score from Module~T, and
+$\mathbf{e}_v \in \mathbb{R}^{136}$ is the one-hot HDBSCAN cluster assignment
+(including the noise label).
+The total input dimension is $d_f = 16 + 32 + 1 + 1 + 136 = 186$.
+
+\paragraph{GraphSAGE architecture.}
+GraphSAGE~\cite{hamilton2017inductive} learns a neighborhood aggregation
+function that generalizes inductively to unseen nodes:
+\begin{equation}
+  \mathbf{h}_v^{(l)}
+    = \sigma\!\left(
+        \mathbf{W}^{(l)}
+        \cdot
+        \mathrm{CONCAT}\!\left(
+          \mathbf{h}_v^{(l-1)},\;
+          \mathrm{MEAN}_{u \in \mathcal{N}(v)}\!\left\{
+            \mathbf{h}_u^{(l-1)}
+          \right\}
+        \right)
+      \right),
+  \label{eq:graphsage}
+\end{equation}
+where $\sigma$ is the ReLU activation and $\mathcal{N}(v)$ is a fixed-size
+sampled neighborhood.
+We use two GraphSAGE layers with hidden dimension 128 and output embedding
+dimension 64, followed by a linear classification head over six transaction
+types.
+Dropout with rate $0.3$ is applied after each layer.
+
+\paragraph{Rationale for GraphSAGE over GAT.}
+Graph Attention Networks (GAT)~\cite{velivckovic2018graph} learn attention
+weights over neighbors but impose quadratic attention-head complexity per
+node.
+For the sparse, non-attributed Bitcoin address graph three considerations
+favor GraphSAGE: (i) \emph{scalability} — neighborhood sampling in GraphSAGE
+scales sub-linearly with graph size, critical for the \num{30000}-node pruned
+subgraph and its highly skewed degree distribution; (ii) \emph{absence of
+node attributes} — attention mechanisms derive most benefit from rich semantic
+attributes (e.g., text or image features); on structural Bitcoin graphs the
+gain is marginal while training cost increases significantly; and (iii)
+\emph{inductive generalization} — GraphSAGE's mean aggregator generalizes to
+unseen addresses appearing in the live transaction stream without retraining,
+a critical operational requirement for real-time monitoring.
+
+\paragraph{Training protocol.}
+The model is trained for a maximum of 100 epochs using Adam with learning
+rate $0.001$ and weight decay $10^{-4}$, with early stopping
+(patience $= 15$ epochs) on the validation AUC-ROC.
+Training terminates at epoch 18, yielding a total train time of
+\SI{2.09}{\second} on the pruned subgraph—confirming that the modular
+spectral preprocessing in Module~S has already extracted the dominant
+structural signal, leaving a compact learning problem for the GNN.
+
+% ---------------------------------------------------------------------------
+\subsection{Module A — Anomaly and Drift Integration}
+\label{sec:module_a}
+
+Module~A is the decision layer of \textsc{SPECTRA}: it fuses the outputs of
+Modules~C, P, and~T into per-address anomaly flags and drift alerts,
+and emits a final trust certificate.
+
+\paragraph{Unified anomaly flag.}
+An address $v$ is flagged anomalous if \emph{any} of three complementary
+conditions holds:
+\begin{equation}
+  \mathrm{anomaly}(v) = 1 \iff
+    r(\mathbf{x}_v) > \tau_{\mathrm{anom}}
+    \;\lor\;
+    m_v > \bar{m} + 2\sigma_m
+    \;\lor\;
+    \mathcal{W}(t) > \delta,
+  \label{eq:anomaly_flag}
+\end{equation}
+where $r(\mathbf{x}_v)$ is the VAE reconstruction error,
+$\tau_{\mathrm{anom}} = 0.1694$ is the $95^{\mathrm{th}}$ percentile of the
+population reconstruction error (learned from the training set),
+$m_v$ is the Markov anomaly score from \eqref{eq:markov_score},
+$\bar{m}$ and $\sigma_m$ are its population mean and standard deviation, and
+$\mathcal{W}(t) = W_1(\mu_{t-1}, \mu_t)$ is the Wasserstein distance for
+time window $t$ with threshold $\delta = 0.1$.
+The disjunctive combination ensures that an address is flagged by any
+evidence type; this union-of-detectors design minimizes false negatives at the
+cost of a controlled increase in false positives, which is the preferred
+operating point for financial forensics~\cite{bahnsen2016fraud}.
+
+\paragraph{Trust certificate.}
+The final trust certificate for address $v$ is the posterior mean trust score
+$\hat{\tau}_v = \alpha_v / (\alpha_v + \beta_v) \in [0,1]$ from Module~P,
+optionally attenuated by the anomaly flag:
+$\tilde{\tau}_v = \hat{\tau}_v \cdot (1 - \mathrm{anomaly}(v))$.
+This scalar certificate is the primary output delivered to downstream
+compliance or forensic systems.
+
+\paragraph{Drift alert.}
+In addition to per-address flags, Module~A emits a binary per-window drift
+alert $\mathcal{A}_t = \mathbf{1}[\mathcal{W}(t) > \delta]$.
+Sustained drift alerts over consecutive windows (all 29 of the 29 observable
+pairs in the study period) indicate concept drift requiring retraining of
+Module~C's VAE and HDBSCAN components.
+Because the Markov transition matrix (Module~T) and GraphSAGE weights
+(Module~R) are conditioned on the cluster state space defined by Module~C,
+a cluster re-labeling event requires propagating updated cluster assignments
+through Modules~P, T, and~R; the modular architecture ensures this can be
+done without restarting the pipeline.
+
+% ---------------------------------------------------------------------------
+\subsection{Unified Algorithm}
+\label{sec:algorithm}
+
+Algorithm~\ref{alg:spectra} presents the complete \textsc{SPECTRA} pipeline
+in pseudocode, showing the sequential data flow across all seven modules.
+Notation follows~\eqref{eq:lsym}--\eqref{eq:anomaly_flag}.
+
+% ---------------------------------------------------------------------------
+\begin{algorithm}[t]
+\caption{\textsc{SPECTRA} — Spectral-Probabilistic Ensemble Clustering for
+         Transaction Recognition and Authentication}
+\label{alg:spectra}
+\begin{algorithmic}[1]
+\Require Raw transaction dataset $\mathcal{D}$ (\num{300000} transactions);
+         hyperparameters $k, r, \beta_{\mathrm{KL}}, \delta, \varepsilon$
+\Ensure  Per-address trust certificate $\tilde{\tau}_v$,
+         anomaly flag $\mathrm{anomaly}(v)$,
+         transaction-type prediction $\hat{y}_v$,
+         drift alert $\mathcal{A}_t$
+
+\Statex
+\Statex \textbf{Module S — Spectral Graph Construction}
+\State Build directed weighted address graph
+       $\mathcal{G}=(\mathcal{V},\mathcal{E},\mathbf{W})$
+       from $\mathcal{D}$\quad
+       ($|\mathcal{V}|=\num{2870000}$, $|\mathcal{E}|=\num{28600000}$)
+\State Prune $\mathcal{G}$ to top-\num{30000} nodes by weighted in-degree
+       $\Rightarrow \mathcal{G}'$
+\State Compute symmetric normalized Laplacian
+       $\mathbf{L}_{\mathrm{sym}} = \mathbf{I} -
+        \mathbf{D}^{-1/2}\mathbf{A}\mathbf{D}^{-1/2}$
+       on $\mathcal{G}'$
+\State Extract $k=10$ spectral embeddings
+       $\mathbf{U} \in \mathbb{R}^{N \times 10}$
+       via randomized SVD (\texttt{n\_iter}$=10$, \texttt{n\_oversamples}$=20$)
+\State Compute 6 behavioral features per node; concatenate with $\mathbf{U}$
+       $\Rightarrow \mathbf{X}_{\mathrm{node}} \in \mathbb{R}^{N \times 16}$
+
+\Statex
+\Statex \textbf{Module E — Information-Theoretic Feature Ranking}
+\State Compute Shannon entropy $H(X_j)$ for each raw feature $X_j$;
+       discard low-entropy features
+\State Estimate $I(X_j; Y)$ via $k$-NN mutual information;
+       retain top-20 features
+       $\Rightarrow \mathbf{x}_{\mathrm{tx}} \in \mathbb{R}^{M \times 20}$
+\State Fit NMF ($r=10$, $\alpha_W=0.1$, $\ell_1$-ratio$=0.5$)
+       $\Rightarrow \mathbf{H} \in \mathbb{R}^{M \times 10}$;
+       concatenate $[\mathbf{x}_{\mathrm{tx}} \| \mathbf{H}]$
+
+\Statex
+\Statex \textbf{Module C — VAE + HDBSCAN Clustering}
+\State Train VAE (hidden$=[128,64]$, latent$=32$, $\beta_{\mathrm{KL}}=1.0$,
+       dropout$=0.2$, 50 epochs, lr$=0.001$) on $\mathbf{x}_{\mathrm{tx}}$
+\State Encode all transactions:
+       $(\boldsymbol{\mu}_v, \boldsymbol{\sigma}^2_v)
+        \leftarrow q_\phi(\mathbf{z} \mid \mathbf{x}_v)$;
+       record reconstruction error $r(\mathbf{x}_v)$
+\State Cluster $\{\boldsymbol{\mu}_v\}$ with HDBSCAN
+       (\texttt{min\_cluster\_size}$=100$, \texttt{min\_samples}$=10$)
+       $\Rightarrow$ 135 clusters + noise; labels $\{c_v\}$
+\For{each adjacent monthly window pair $(t-1, t)$, $t=1,\ldots,29$}
+    \State Compute $\mathcal{W}(t) = W_1(\mu_{t-1}, \mu_t)$;
+           set $\mathcal{A}_t = \mathbf{1}[\mathcal{W}(t) > \delta]$
+\EndFor
+
+\Statex
+\Statex \textbf{Module P — Bayesian Trust Scoring}
+\State Initialize $(\alpha_v, \beta_v) \leftarrow (2, 2)$ for all $v$
+\For{each transaction $\mathbf{x}$ at address $v$ (in temporal order)}
+    \State $\ell \leftarrow \exp(-r(\mathbf{x}))$
+    \State $\alpha_v \leftarrow \alpha_v + \ell$;\quad
+           $\beta_v \leftarrow \beta_v + (1-\ell)$
+\EndFor
+\State $\hat{\tau}_v \leftarrow \alpha_v / (\alpha_v + \beta_v)$
+       for all $v$
+
+\Statex
+\Statex \textbf{Module T — Markov Chain Behavioral Profiling}
+\State Build transition count matrix $\mathbf{N} \in \mathbb{R}^{136 \times 136}$
+       from address cluster-state sequences
+\State Estimate $\mathbf{P}$:
+       $P_{ij} \leftarrow (n_{ij} + \varepsilon) /
+                           (\sum_{j'} n_{ij'} + 136\varepsilon)$,\;
+       $\varepsilon = 10^{-6}$
+\State Compute stationary distribution $\boldsymbol{\pi}$ via power iteration
+       (tol $=10^{-8}$)
+\State $m_v \leftarrow -\log P_{c_{v,t-1},\, c_{v,t}}$
+       for each transition of address $v$
+
+\Statex
+\Statex \textbf{Module R — GraphSAGE Transaction Recognition}
+\State Assemble node feature matrix:
+       $\mathbf{f}_v =
+        [\mathbf{X}_{\mathrm{node},v} \;\|\;
+         \boldsymbol{\mu}_v \;\|\;
+         \hat{\tau}_v \;\|\;
+         m_v \;\|\;
+         \mathbf{e}_{c_v}]
+        \in \mathbb{R}^{186}$
+\State Train two-layer GraphSAGE (hidden$=128$, embed$=64$, dropout$=0.3$,
+       lr$=0.001$, wd$=10^{-4}$, patience$=15$) on $\mathcal{G}'$
+       with node features $\mathbf{F}$ and transaction-type labels
+\State Infer $\hat{y}_v \leftarrow \mathrm{argmax}\;\mathrm{softmax}
+       (\mathbf{h}_v^{(2)}\mathbf{W}_{\mathrm{cls}})$ for all $v$
+
+\Statex
+\Statex \textbf{Module A — Anomaly and Drift Integration}
+\State Compute population statistics:
+       $\tau_{\mathrm{anom}} \leftarrow \mathrm{perc}_{95}(\{r(\mathbf{x}_v)\})$;\quad
+       $\bar{m}, \sigma_m \leftarrow \mathrm{mean}, \mathrm{std}(\{m_v\})$
+\For{each address $v$}
+    \State $\mathrm{anomaly}(v) \leftarrow
+            \mathbf{1}\!\left[
+              r(\mathbf{x}_v) > \tau_{\mathrm{anom}}
+              \;\lor\;
+              m_v > \bar{m} + 2\sigma_m
+              \;\lor\;
+              \mathcal{A}_{t(v)} = 1
+            \right]$
+    \State $\tilde{\tau}_v \leftarrow \hat{\tau}_v \cdot
+            (1 - \mathrm{anomaly}(v))$
+\EndFor
+\State \Return $\{\hat{y}_v\}$, $\{\tilde{\tau}_v\}$,
+               $\{\mathrm{anomaly}(v)\}$, $\{\mathcal{A}_t\}$
+\end{algorithmic}
+\end{algorithm}
+% ---------------------------------------------------------------------------
+
+\subsection{Complexity Analysis}
+\label{sec:complexity}
+
+Table~\ref{tab:complexity} summarizes the computational complexity of each
+module.
+The dominant cost is Module~S: randomized SVD on $\mathbf{L}_{\mathrm{sym}}$
+runs in $\mathcal{O}(N k \log k)$ time~\cite{halko2011finding}, far cheaper
+than the $\mathcal{O}(N^2)$ dense eigensolver.
+Module~C's VAE training is $\mathcal{O}(M \cdot B^{-1} \cdot E_{\max})$
+where $B = 512$ is the batch size and $E_{\max} = 50$ the epoch budget;
+HDBSCAN is $\mathcal{O}(M \log M)$ for the mutual reachability graph
+construction phase.
+Module~T's transition matrix estimation is $\mathcal{O}(|\mathcal{S}|^2)$
+for matrix storage and $\mathcal{O}(|\mathcal{S}|^2 / (1-\lambda_2))$ for
+power iteration convergence, where $\lambda_2$ is the second eigenvalue of
+$\mathbf{P}$.
+Module~R's GraphSAGE forward pass is $\mathcal{O}(N \cdot d_f \cdot L \cdot S)$
+where $L = 2$ is the number of layers and $S = 25$ the neighborhood sample
+size; early stopping at epoch 18 further limits wall-clock training time to
+\SI{2.09}{\second}.
+End-to-end inference for a new address (given frozen modules) is dominated by
+the VAE encoder ($\mathcal{O}(d_f \cdot 128)$) and GraphSAGE forward pass
+($\mathcal{O}(d_f \cdot S \cdot 128)$), both operating in sub-millisecond
+wall-clock time on a single CPU core.
+
+\begin{table}[t]
+  \caption{Per-module complexity and key hyperparameters of \textsc{SPECTRA}.
+           $N=\num{30000}$ (pruned nodes), $M=\num{300000}$ (transactions),
+           $k=10$ (spectral dims), $C=136$ (cluster states),
+           $d_f=186$ (GNN input dim).}
+  \label{tab:module_summary}
+  \centering
+  \renewcommand{\arraystretch}{1.15}
+  \begin{tabular}{@{}lllp{3.6cm}@{}}
+    \toprule
+    \textbf{Module} & \textbf{Output} & \textbf{Complexity} & \textbf{Key hyperparameters} \\
+    \midrule
+    S — Spectral  & $\mathbf{X}_{\mathrm{node}} \!\in\! \mathbb{R}^{N\times 16}$
+                  & $\mathcal{O}(Nk\log k)$
+                  & $k{=}10$, \texttt{n\_iter}$=10$ \\
+    E — Entropy   & $\mathbf{x}_{\mathrm{tx}} \!\in\! \mathbb{R}^{M\times 20}$
+                  & $\mathcal{O}(MF)$
+                  & top-20 MI, NMF $r{=}10$ \\
+    C — Cluster   & $\{c_v\}$, $\{\boldsymbol{\mu}_v\}$, $\{\mathcal{A}_t\}$
+                  & $\mathcal{O}(M\log M)$
+                  & latent$=32$, MCS$=100$ \\
+    P — Probabilistic & $\hat{\tau}_v \!\in\! [0,1]$
+                  & $\mathcal{O}(M)$
+                  & $\mathrm{Beta}(2,2)$ prior \\
+    T — Markov    & $m_v \!\in\! \mathbb{R}_{+}$
+                  & $\mathcal{O}(C^2)$
+                  & $|\mathcal{S}|{=}136$, $\varepsilon{=}10^{-6}$ \\
+    R — Recognition & $\hat{y}_v \!\in\! \{1,\ldots,6\}$
+                  & $\mathcal{O}(NLSd_f)$
+                  & hidden$=128$, dropout$=0.3$ \\
+    A — Anomaly   & $\mathrm{anomaly}(v)$, $\tilde{\tau}_v$
+                  & $\mathcal{O}(N)$
+                  & $\tau_{\mathrm{anom}}{=}0.1694$, $\delta{=}0.1$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \caption{Top-20 transaction features ranked by mutual information
+           $I(X_j; Y)$ with transaction-type label $Y$.
+           All values rounded to three decimal places.}
+  \label{tab:mi_top20}
+  \centering
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}clc@{}}
+    \toprule
+    \textbf{Rank} & \textbf{Feature} & $I(X_j;\,Y)$ \\
+    \midrule
+    1  & \texttt{weight}                   & 1.320 \\
+    2  & \texttt{vsize}                    & 1.204 \\
+    3  & \texttt{size}                     & 1.193 \\
+    4  & \texttt{output\_count}            & 1.171 \\
+    5  & \texttt{input\_count}             & 0.726 \\
+    6  & \texttt{fee\_rate\_sat\_per\_byte}& 0.494 \\
+    7  & \texttt{fee}                      & 0.471 \\
+    8  & \texttt{value\_difference}        & 0.470 \\
+    9  & \texttt{fee\_rate\_sat\_per\_vbyte}& 0.410 \\
+    10 & \texttt{total\_output\_value}     & 0.380 \\
+    \multicolumn{3}{c}{\textit{(ranks 11--20 reported in supplementary material)}} \\
+    \bottomrule
+  \end{tabular}
+\end{table}

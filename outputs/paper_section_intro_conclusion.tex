@@ -1,0 +1,319 @@
+% =============================================================================
+%  SPECTRA — Section I: Introduction (body) + Section VIII: Conclusion
+%  Target: IEEE Transactions on Information Forensics & Security
+%  Author: Sagar Korde
+%  Note: This file contains the Introduction body (after opening paragraphs)
+%        and the Conclusion section. Merge with master .tex accordingly.
+% =============================================================================
+
+% -----------------------------------------------------------------------------
+%  SECTION I — INTRODUCTION (body, to be placed after opening paragraphs)
+% -----------------------------------------------------------------------------
+
+\section{Introduction}
+\label{sec:introduction}
+
+Bitcoin's pseudonymous ledger now records more than \num{5.8} million
+transactions daily, creating an enormous evidentiary surface for forensic
+investigators, compliance teams, and anti-money-laundering (AML) practitioners.
+Extracting actionable intelligence from this stream requires solving three
+structurally distinct problems simultaneously.
+First, \emph{transaction-type identification}: determining whether a given
+transaction represents an ordinary peer-to-peer transfer, a coin-join mixing
+event, a service payment, or another category, is essential for financial
+forensics yet remains challenging because transaction types share overlapping
+fee, size, and graph-degree distributions.
+Second, \emph{real-time anomaly and trust scoring}: AML compliance mandates
+that suspicious clusters of addresses be flagged with quantified confidence,
+not merely a binary label, and that these scores update continuously as new
+blocks arrive.
+Third, \emph{temporal concept drift}: the Bitcoin ecosystem evolves---protocol
+upgrades (SegWit, Taproot), shifting exchange policies, and the entry of new
+institutional actors cause the statistical distribution of transactions to
+shift over time in ways that silently degrade frozen classifiers without
+triggering any observable runtime error.
+Existing methods address at most one of these challenges.
+Rule-based heuristics~\cite{Harrigan2016} provide labels but no uncertainty
+estimates and become stale as the protocol evolves.
+Supervised classifiers trained on static, rule-annotated datasets achieve
+high accuracy on held-out splits from the same distribution but generalize
+poorly when the annotation rules themselves constitute features exploited by
+the model.
+Graph neural networks proposed for blockchain analysis
+\cite{Pareja2020,Weber2019} improve structural reasoning but offer no
+probabilistic guarantees, no drift monitoring, and no per-address trust
+certificates.
+No single published framework simultaneously addresses all three challenges
+within a reproducible, end-to-end pipeline.
+
+\subsection*{Gap Analysis}
+
+The dominant family of tabular classifiers---gradient boosted
+trees~\cite{Chen2016} being the canonical example---achieves near-perfect
+accuracy on rule-annotated blockchain benchmarks.
+This performance, however, reflects a form of \emph{label--feature
+entanglement}: because transaction-type labels are themselves derived from
+deterministic heuristics applied to the same raw features that the classifier
+observes (e.g., the number of inputs and outputs, the fee-per-byte ratio),
+the model learns to invert the labelling function rather than to reason about
+latent economic behavior.
+When temporal identifiers such as \texttt{block\_height}, \texttt{block\_time},
+and \texttt{year} are included---as they are in standard benchmark releases
+---a decision tree can partition the data by era and recover the exact rule
+boundaries without any generalization whatsoever.
+XGBoost and BERT4ETH~\cite{Hu2023} achieve accuracy of \num{1.0} under
+this oracle setting; removing these temporally entangled features degrades
+their accuracy by more than \num{30} percentage points, exposing the
+fragility of this evaluation paradigm.
+
+Graph-based approaches address topology but introduce their own limitations.
+EvolveGCN~\cite{Pareja2020} adapts GCN weights across temporal snapshots
+but treats each snapshot independently, cannot propagate trust estimates,
+and provides no mechanism for detecting the distributional shift that triggers
+its own accuracy degradation.
+AA-GNN~\cite{Zhou2020} augments attention over neighborhood aggregation but
+similarly lacks probabilistic uncertainty quantification.
+Clustering-based methods~\cite{McInnes2017} identify behavioral cohorts in
+feature space without providing classification or drift certificates.
+Bayesian methods applicable in principle to address scoring
+\cite{DeFord2019} have not been integrated with graph-structured input
+representations.
+To the best of our knowledge, no prior work simultaneously provides
+(i)~density-based behavioral clustering in a learned latent space,
+(ii)~drift monitoring via optimal-transport distances,
+(iii)~per-address Bayesian trust certificates, and
+(iv)~inductive node classification over the transaction graph.
+
+\subsection*{SPECTRA: Overview}
+
+We present \textsc{SPECTRA}
+(\textbf{S}pectral-\textbf{P}robabilistic \textbf{E}nsemble \textbf{C}lustering
+for \textbf{T}ransaction \textbf{R}ecognition and \textbf{A}uthentication),
+a seven-module framework designed to address all three challenges within a
+unified, interpretable pipeline.
+
+\textbf{Module S} constructs a directed weighted address graph
+$\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{W})$ over \num{30000}
+high-degree hub nodes and extracts $k=10$ spectral node embeddings from the
+normalized graph Laplacian via randomized truncated SVD~\cite{Halko2011}.
+Randomized SVD is critical at Bitcoin scale: the ARPACK eigensolver, which
+underlies SciPy's \texttt{eigsh}, suffers convergence failures and threading
+crashes on sparse graphs exceeding $10^6$ nodes under Python~3.12's GIL
+implementation; randomized methods achieve $\epsilon$-approximate
+eigenvectors in $\mathcal{O}(nk\log k)$ time regardless of graph size.
+The resulting embeddings capture global community structure in a form stable
+across block-height partitions.
+
+\textbf{Modules E and C} form the probabilistic core of the framework.
+Module~E applies mutual-information-based feature selection followed by
+non-negative matrix factorization to identify the top-20 latent transaction
+attributes.
+Module~C encodes each transaction into a Gaussian latent distribution
+$q_\phi(\mathbf{z}|\mathbf{x}) = \mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2\mathbf{I})$
+via a $\beta$-VAE~\cite{Kingma2014} with latent dimension \num{32},
+enabling principled anomaly scoring through the Evidence Lower Bound (ELBO)
+reconstruction error.
+HDBSCAN~\cite{McInnes2017} applied to this latent space discovers \num{135}
+behavioral clusters without requiring a pre-specified cluster count $k$,
+grouping addresses by their transaction patterns rather than by arbitrary
+geometric boundaries.
+
+\textbf{Module C} additionally provides temporal drift monitoring: Wasserstein-1
+distances between successive cluster-label distributions are computed over
+rolling time windows of configurable width.
+Across \num{29} of \num{29} evaluated windows in our experimental protocol,
+the Wasserstein distance exceeds the alert threshold $\delta = 0.1$,
+confirming that Bitcoin transaction behavior exhibits persistent, statistically
+significant concept drift---a finding with direct implications for the
+deployment lifetime of any frozen classifier.
+
+\textbf{Modules P and T} produce address-level intelligence.
+Module~P maintains per-address Bayesian trust scores modeled as a Beta
+conjugate posterior, updated online from reconstruction error likelihoods,
+with a dataset-wide mean trust of \num{0.634}.
+Module~T constructs Markov chain behavioral profiles over the \num{136}
+observed cluster states, scoring anomaly via the negative log-probability
+of an address's observed transition sequence; the mean anomaly score of
+\num{0.875} reflects the high entropy of transaction behavior in the
+CryptoGraphNet corpus.
+
+\textbf{Module R} fuses all preceding module outputs into a node-feature
+matrix and trains a two-layer GraphSAGE network~\cite{Hamilton2017} for
+inductive address classification.
+GraphSAGE's sampling-based neighborhood aggregation generalizes to addresses
+unseen during training, a property essential for live blockchain monitoring
+where new addresses are created at each block.
+
+\textbf{Module A} integrates anomaly signals from the VAE (ELBO), Markov
+chain (transition probability), and Bayesian trust score into a unified
+per-address anomaly index, providing a single, interpretable output for
+AML alert triage.
+
+\subsection*{Evaluation Preview}
+
+We evaluate SPECTRA on the CryptoGraphNet
+benchmark~\cite{Farrugia2020} comprising \num{300000} transactions
+labeled across six transaction types.
+To address the label--feature entanglement problem described above, we
+introduce a \emph{two-track evaluation protocol}: a \emph{tabular track}
+that evaluates classifiers with access to all raw features (including temporal
+identifiers), and a \emph{graph-topology track} that restricts all models
+to graph-structural and module-derived features only.
+Under this protocol, XGBoost and BERT4ETH achieve accuracy of \num{1.0} on
+the tabular track (oracle performance attributable to entanglement) but
+degrade substantially on the graph-topology track, while SPECTRA achieves
+accuracy of \num{0.916} and Matthews Correlation Coefficient (MCC) of
+\num{0.840}---outperforming EvolveGCN by \num{33.9} percentage points and
+AA-GNN by \num{41.7} percentage points on the same track.
+Across six ablation variants, the full seven-module system consistently
+dominates all partial ablations, confirming that each module contributes
+independently to classification performance.
+
+\subsection*{Contributions}
+
+The primary contributions of this paper are as follows:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{C\arabic*}]
+
+  \item \textbf{Spectral graph representation with randomized SVD
+    (Module~S).}
+    We construct a directed weighted Bitcoin address graph and extract
+    $k$-dimensional spectral embeddings from the normalized graph Laplacian
+    via randomized truncated SVD~\cite{Halko2011}, resolving convergence and
+    threading failures encountered by ARPACK on large sparse graphs and
+    providing provably convergent spectral features for nodes of any
+    connectivity degree.
+
+  \item \textbf{Probabilistic VAE latent space with principled anomaly
+    scoring (Modules~E/C).}
+    A $\beta$-VAE~\cite{Kingma2014} encodes transactions into a
+    \num{32}-dimensional Gaussian latent space, enabling ELBO-based anomaly
+    scoring and density clustering (HDBSCAN~\cite{McInnes2017}) that
+    discovers \num{135} behavioral clusters without a pre-specified $k$.
+
+  \item \textbf{Wasserstein drift monitoring over cluster distributions
+    (Module~C).}
+    We compute Wasserstein-1 distances between successive cluster-label
+    distributions over rolling time windows and provide quantitative,
+    threshold-based drift alerts, detecting persistent concept drift in
+    \num{29} of \num{29} evaluation windows.
+
+  \item \textbf{Bayesian trust certificates and Markov behavioral profiling
+    (Modules~P/T).}
+    Per-address trust is maintained as a Beta conjugate posterior updated
+    online from reconstruction error likelihoods.
+    A Markov chain over \num{136} cluster states captures behavioral
+    trajectories, with anomaly scores derived from low-probability
+    state transitions.
+
+  \item \textbf{Inductive GraphSAGE classifier (Module~R).}
+    A two-layer GraphSAGE network~\cite{Hamilton2017} trained on
+    module-fused node features performs address classification inductively,
+    generalizing to addresses unseen during training---a critical property
+    for live blockchain monitoring.
+
+  \item \textbf{Temporally-fair two-track evaluation protocol.}
+    We identify and formally characterize label--feature entanglement in
+    rule-annotated blockchain datasets, propose a two-track evaluation
+    protocol separating tabular and graph-topology methods, and release
+    temporally-fair baseline results with \texttt{block\_height},
+    \texttt{block\_time}, and \texttt{year} removed to prevent temporal
+    identity exploitation.
+
+  \item \textbf{Comprehensive, reproducible benchmark.}
+    We evaluate ten baselines (K-Means, DBSCAN, Isolation Forest,
+    AE+KMeans, HDBSCAN, XGBoost, EvolveGCN, BERT4ETH-BTC, Graph
+    Autoencoder, AA-GNN) and six ablation variants under identical
+    chronological train/validation/test splits, with all code, configurations,
+    and checkpoints publicly released.
+
+\end{enumerate}
+
+The remainder of this paper is organized as follows.
+Section~\ref{sec:related} surveys related work.
+Section~\ref{sec:problem} formalizes the problem.
+Section~\ref{sec:architecture} describes the SPECTRA architecture in detail.
+Section~\ref{sec:label_provenance} analyzes label--feature entanglement.
+Section~\ref{sec:experiments} presents the experimental setup.
+Section~\ref{sec:results} reports results and ablations.
+Section~\ref{sec:conclusion} concludes with limitations and future directions.
+
+
+% -----------------------------------------------------------------------------
+%  SECTION VIII — CONCLUSION
+% -----------------------------------------------------------------------------
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have presented \textsc{SPECTRA}, a seven-module framework for Bitcoin
+transaction analysis that, to the best of our knowledge, is the first system
+to simultaneously address transaction-type classification, per-address
+Bayesian trust scoring, temporal concept-drift monitoring, and interpretable
+behavioral clustering within a single end-to-end pipeline.
+On the CryptoGraphNet benchmark, SPECTRA-full achieves an accuracy of
+\num{0.916} and a Matthews Correlation Coefficient of \num{0.840} on the
+graph-topology evaluation track, outperforming EvolveGCN~\cite{Pareja2020}
+by \num{33.9} percentage points and AA-GNN~\cite{Zhou2020} by
+\num{41.7} percentage points.
+Beyond classification, the framework discovers \num{135} behavioral
+clusters without a pre-specified $k$, detects statistically significant
+concept drift in \num{29} of \num{29} evaluated time windows, and assigns
+per-address Bayesian trust scores with a dataset-wide mean of \num{0.634}
+---outputs that no single prior baseline provides in isolation.
+
+A methodological contribution of equal practical significance is our
+two-track evaluation protocol for label-entangled datasets.
+By separating the tabular track (where rule-derived features allow oracle-level
+accuracy) from the graph-topology track (where only structural and
+module-derived features are permitted), we expose the fragility of
+previously reported benchmark results and provide a reproducible framework
+for fair comparison in future work.
+We recommend that all future evaluations on rule-annotated blockchain
+benchmarks adopt this distinction explicitly.
+
+\subsection*{Limitations}
+
+Three limitations warrant disclosure.
+First, \emph{hub-node coverage}: the spectral graph module operates on the
+\num{30000} highest-degree addresses; \num{78.5}\% of test transactions
+involve addresses absent from this hub set and therefore receive a uniform
+prior rather than a learned spectral embedding.
+Bitcoin's one-time-address model---where addresses are routinely discarded
+after a single use---makes this an inherent challenge for any graph-based
+approach that requires sufficient structural context per node.
+Second, \emph{HDBSCAN memory complexity}: HDBSCAN's mutual-reachability
+construction is $\mathcal{O}(n^2)$ in memory for exact computation, which
+limits scalability to the $10^6$-transaction regime without approximate
+nearest-neighbor pre-filtering.
+Third, \emph{Markov chain order assumption}: Module~T assumes the first-order
+Markov property---that the next cluster state depends only on the current
+state---which may underfit address sequences with longer-range behavioral
+dependencies such as multi-round coin-join protocols.
+
+\subsection*{Future Work}
+
+Four directions present themselves as natural extensions.
+\textbf{Cross-chain generalization}: applying SPECTRA to Ethereum and
+Monero requires handling account-model semantics and ring-signature
+unlinkability, respectively, and provides a stringent test of the
+framework's architectural assumptions.
+\textbf{Federated forensics}: a federated learning variant of the
+GraphSAGE and VAE modules would allow multiple exchanges or law-enforcement
+agencies to collaboratively train shared representations without disclosing
+raw transaction data---a privacy-preserving configuration aligned with
+GDPR and FATF guidelines for multi-party AML compliance.
+\textbf{Attention-based behavioral profiling}: replacing the first-order
+Markov chain in Module~T with a transformer-based sequence model or a
+higher-order Markov process would capture multi-hop behavioral dependencies
+and likely improve anomaly detection precision for sophisticated mixing
+schemes.
+\textbf{Online GNN fine-tuning for address drift}: as new address classes
+emerge with each protocol upgrade, a continual-learning extension of
+Module~R that fine-tunes GraphSAGE weights online---without catastrophic
+forgetting of previously learned classes---would extend the operational
+lifetime of a deployed SPECTRA instance without requiring full retraining.
+
+\textsc{SPECTRA}'s modular architecture is designed to accommodate these
+extensions without redesign of the core pipeline, and all components are
+released to facilitate community development.

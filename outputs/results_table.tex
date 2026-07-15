@@ -1,0 +1,29 @@
+\begin{table}[!t]
+\caption{SPECTRA vs. Baselines — Classification Performance on Bitcoin Tx Dataset}
+\label{tab:results}
+\centering
+\begin{tabular}{lccccc}
+\toprule
+Model & Accuracy & F1 (Macro) & AUC-ROC & MCC & Train(s) \\
+\midrule
+KMeans & --- & --- & --- & --- & 8.7599 \\
+DBSCAN & --- & --- & --- & --- & 0.6471 \\
+IsolationForest & --- & --- & --- & --- & 1.0663 \\
+AE+KMeans & --- & --- & --- & --- & 34.3109 \\
+PlainHDBSCAN & --- & --- & --- & --- & 54.2162 \\
+XGBoost & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 6.6994 \\
+EvolveGCN & 0.5773 & 0.5561 & 0.8894 & 0.5002 & 2.1811 \\
+BERT4ETH & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 229.4553 \\
+GraphAE & --- & --- & --- & --- & 0.2587 \\
+AA-GNN & 0.4992 & 0.4800 & 0.8462 & 0.4101 & 0.9137 \\
+\textbf{SPECTRA & 0.4036 & 0.1549 & 0.4209 & 0.3250 & 2.0933 \\}
+SPECTRA-noS & 0.9102 & 0.3718 & 0.5732 & 0.8318 & --- \\
+SPECTRA-noVAE & 0.9160 & 0.3815 & 0.5618 & 0.8397 & --- \\
+SPECTRA-noB & 0.9060 & 0.3636 & 0.5497 & 0.8235 & --- \\
+SPECTRA-noM & 0.9060 & 0.3636 & 0.5507 & 0.8235 & --- \\
+SPECTRA-noW & 0.9160 & 0.3815 & 0.5618 & 0.8397 & --- \\
+\textbf{SPECTRA-full & 0.9160 & 0.3806 & 0.5545 & 0.8397 & --- \\}
+SPECTRA-HDBSCAN & --- & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,557 @@
+% =============================================================================
+%  SPECTRA — Section III: Problem Formulation
+%  Target: IEEE Transactions on Information Forensics & Security (TIFS)
+%  Author: Sagar Korde
+% =============================================================================
+%
+%  Required packages (add to preamble if not already present):
+%    \usepackage{amsmath, amssymb, amsthm}
+%    \usepackage{mathtools}
+%    \usepackage{bm}
+%    \usepackage{booktabs}
+%    \usepackage{siunitx}
+%    \usepackage{thmtools}
+%    \usepackage{mdframed}   % for the boxed problem statement
+%
+%  Theorem-like environments (add to preamble):
+%    \theoremstyle{definition}
+%    \newtheorem{definition}{Definition}[section]
+%    \newtheorem{problem}[definition]{Problem}
+% =============================================================================
+
+\section{Problem Formulation}
+\label{sec:problem}
+
+We formalize the \textsc{SPECTRA} pipeline as a sequence of well-defined
+mathematical objects.  Table~\ref{tab:notation} summarizes all principal
+symbols used throughout the remainder of the paper.
+
+% ---------------------------------------------------------------------------
+%  Notation table
+% ---------------------------------------------------------------------------
+\begin{table}[!t]
+  \renewcommand{\arraystretch}{1.18}
+  \caption{Principal Notation}
+  \label{tab:notation}
+  \centering
+  \small
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    \textbf{Symbol} & \textbf{Description} & \textbf{Value / Dimension} \\
+    \midrule
+    $\mathcal{G}$ & Bitcoin address graph & --- \\
+    $\mathcal{V}$ & Raw wallet-address node set & $|\mathcal{V}|=\num{2879144}$ \\
+    $\mathcal{V}^{*}$ & Hub-pruned node set & $|\mathcal{V}^{*}|=\num{30000}$ \\
+    $\mathcal{E}$ & Directed edge set (sender$\to$receiver) & --- \\
+    $w_{uv}$ & Edge weight (BTC transferred) & $\mathbb{R}_{\geq 0}$ \\
+    $N$ & Observation window (transactions) & $\num{300000}$ \\
+    $\mathbf{A}_{\mathrm{sym}}$ & Symmetrized adjacency matrix & $\mathbb{R}^{|\mathcal{V}^{*}|\times|\mathcal{V}^{*}|}$ \\
+    $\mathbf{L}_{\mathrm{sym}}$ & Normalized graph Laplacian & $\mathbb{R}^{|\mathcal{V}^{*}|\times|\mathcal{V}^{*}|}$ \\
+    $\boldsymbol{\Phi}$ & Spectral embedding matrix & $\mathbb{R}^{|\mathcal{V}^{*}|\times k},\;k=10$ \\
+    $\mathbf{f}_{v}$ & Hand-crafted node features & $\mathbb{R}^{6}$ \\
+    $\mathbf{X}_{\mathrm{node}}$ & Augmented node feature matrix & $\mathbb{R}^{\num{30000}\times 16}$ \\
+    $\mathbf{x}$ & Tabular transaction feature vector & $\mathbb{R}^{20}$ \\
+    $\mathbf{z}$ & VAE latent code & $\mathbb{R}^{32}$ \\
+    $\mathbf{Z}_{\mathrm{all}}$ & Full latent matrix & $\mathbb{R}^{N\times 32}$ \\
+    $r(\mathbf{x})$ & VAE reconstruction error (anomaly score) & $\mathbb{R}_{\geq 0}$ \\
+    $\tau_{\mathrm{rec}}$ & Reconstruction anomaly threshold & $0.1694$ \\
+    $\mathbf{P}_{\mathrm{soft}}$ & HDBSCAN soft membership & $\mathbb{R}^{N\times 135}$ \\
+    $\tau_{v}$ & Bayesian trust score for address $v$ & $[0,1]$ \\
+    $\gamma_{v}$ & Markov anomaly score for address $v$ & $\mathbb{R}_{\geq 0}$ \\
+    $\hat{y}_{i}$ & Predicted transaction-type label & $\{0,\ldots,5\}$ \\
+    $\mathcal{A}_{t}$ & Drift alert flag at window $t$ & $\{0,1\}$ \\
+    $\delta$ & Wasserstein alert threshold & $0.1$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------------------
+%  III-A  Bitcoin Transaction Graph
+% ---------------------------------------------------------------------------
+\subsection{Bitcoin Transaction Graph}
+\label{subsec:graph}
+
+\begin{definition}[Bitcoin Address Graph]
+\label{def:graph}
+Let $\mathcal{G} = (\mathcal{V},\,\mathcal{E},\,\mathbf{W})$ be a
+\emph{directed weighted graph} in which:
+\begin{itemize}
+  \item $\mathcal{V}$ is the set of unique Bitcoin wallet addresses observed
+        over an observation window of $N = \num{300000}$ transactions,
+        $|\mathcal{V}| = \num{2879144}$;
+  \item $\mathcal{E} \subseteq \mathcal{V}\times\mathcal{V}$ is the set of
+        directed edges, where $(u,v)\in\mathcal{E}$ if address $u$ appears as
+        a sender and address $v$ appears as a receiver in at least one
+        transaction; and
+  \item $\mathbf{W}:\mathcal{E}\to\mathbb{R}_{>0}$ is the weight function,
+        with $w_{uv}$ equal to the total BTC transferred from $u$ to $v$
+        summed across all transactions in the window.
+\end{itemize}
+\end{definition}
+
+\noindent\textbf{Address parsing.}
+Each raw transaction record exposes two semicolon-delimited
+\texttt{VARCHAR[]} arrays: \texttt{input\_addresses} (senders) and
+\texttt{output\_addresses} (receivers).
+For a transaction $t_i$ with value $\mathrm{val}_i$, sender set
+$\mathcal{I}_i$, and receiver set $\mathcal{O}_i$, each directed edge
+$(u,v)\in\mathcal{I}_i\times\mathcal{O}_i$ receives an additive weight
+contribution of
+\begin{equation}
+  \Delta w_{uv}^{(i)}
+    \;=\;
+    \frac{\mathrm{val}_i}{|\mathcal{I}_i|\;\cdot\;|\mathcal{O}_i|},
+  \label{eq:edge_weight}
+\end{equation}
+so that the total BTC value of every transaction is exactly preserved in the
+edge-weight sum regardless of the number of inputs or outputs.
+
+\noindent\textbf{Hub-node pruning.}
+The raw graph $\mathcal{G}$ contains $|\mathcal{V}| = \num{2879144}$ nodes,
+making full spectral decomposition computationally intractable.
+We therefore retain only the $|\mathcal{V}^{*}| = \num{30000}$ nodes with
+the highest \emph{undirected} degree in $\mathcal{G}$, forming the pruned
+hub graph $\mathcal{G}^{*} = (\mathcal{V}^{*}, \mathcal{E}^{*}, \mathbf{W}^{*})$
+where $\mathcal{E}^{*}$ and $\mathbf{W}^{*}$ are the restrictions of
+$\mathcal{E}$ and $\mathbf{W}$ to $\mathcal{V}^{*}\times\mathcal{V}^{*}$.
+Hub nodes collectively account for the dominant fraction of transaction volume
+and preserve the structural skeleton of the network~\cite{leskovec2007graph}.
+
+% ---------------------------------------------------------------------------
+%  III-B  Spectral Embedding
+% ---------------------------------------------------------------------------
+\subsection{Spectral Graph Embedding}
+\label{subsec:spectral}
+
+\begin{definition}[Normalized Graph Laplacian]
+\label{def:laplacian}
+Given the pruned graph $\mathcal{G}^{*}$, let
+$\mathbf{A}\in\mathbb{R}^{|\mathcal{V}^{*}|\times|\mathcal{V}^{*}|}$ be its
+weighted adjacency matrix.  Define:
+\begin{align}
+  \mathbf{A}_{\mathrm{sym}}
+    &= \frac{\mathbf{A} + \mathbf{A}^{\!\top}}{2},
+    \label{eq:Asym} \\[4pt]
+  \mathbf{D}
+    &= \operatorname{diag}\!\bigl(\mathbf{A}_{\mathrm{sym}}\,\mathbf{1}\bigr),
+    \label{eq:degree} \\[4pt]
+  \mathbf{L}
+    &= \mathbf{D} - \mathbf{A}_{\mathrm{sym}},
+    \label{eq:laplacian} \\[4pt]
+  \mathbf{L}_{\mathrm{sym}}
+    &= \mathbf{D}^{-1/2}\,\mathbf{L}\,\mathbf{D}^{-1/2},
+    \label{eq:Lsym}
+\end{align}
+where $\mathbf{1}$ denotes the all-ones vector.
+$\mathbf{L}_{\mathrm{sym}}$ is the \emph{normalized (symmetric)} graph
+Laplacian with eigenvalues in $[0,2]$.
+\end{definition}
+
+\noindent\textbf{Spectral embedding.}
+Let $0 = \lambda_1 \leq \lambda_2 \leq \cdots \leq \lambda_{|\mathcal{V}^{*}|}$
+be the eigenvalues of $\mathbf{L}_{\mathrm{sym}}$ and
+$\mathbf{u}_1, \mathbf{u}_2, \ldots$ the corresponding orthonormal
+eigenvectors.
+The spectral embedding is the matrix formed by the bottom-$k$
+\emph{non-trivial} eigenvectors:
+\begin{equation}
+  \boldsymbol{\Phi}
+    = \bigl[\mathbf{u}_{2},\,\mathbf{u}_{3},\,\ldots,\,\mathbf{u}_{k+1}\bigr]
+    \;\in\; \mathbb{R}^{|\mathcal{V}^{*}|\times k},
+  \quad k = 10.
+  \label{eq:Phi}
+\end{equation}
+Each row $\boldsymbol{\phi}_{v}\in\mathbb{R}^{k}$ encodes the spectral
+position of node $v$ in the graph.
+Randomized truncated SVD is used to compute~\eqref{eq:Phi} efficiently.
+
+\noindent\textbf{Augmented node features.}
+For each node $v\in\mathcal{V}^{*}$ we compute a six-dimensional hand-crafted
+feature vector
+\begin{equation}
+  \mathbf{f}_{v}
+    = \bigl[
+        f^{\mathrm{fi}}_v,\;
+        f^{\mathrm{vel}}_v,\;
+        f^{\mathrm{arv}}_v,\;
+        f^{\mathrm{asv}}_v,\;
+        f^{\mathrm{tgm}}_v,\;
+        f^{\mathrm{tgs}}_v
+      \bigr]^{\!\top} \in \mathbb{R}^{6},
+  \label{eq:fv}
+\end{equation}
+where the components represent the \emph{fan-in ratio}
+($f^{\mathrm{fi}}$), \emph{transaction velocity}
+($f^{\mathrm{vel}}$), \emph{average received value}
+($f^{\mathrm{arv}}$), \emph{average sent value}
+($f^{\mathrm{asv}}$), \emph{mean temporal gap}
+($f^{\mathrm{tgm}}$), and \emph{standard deviation of temporal gap}
+($f^{\mathrm{tgs}}$), respectively.
+The augmented feature vector for node $v$ is the concatenation
+\begin{equation}
+  \mathbf{h}_{v}
+    = \bigl[\boldsymbol{\phi}_{v};\; \mathbf{f}_{v}\bigr]
+    \;\in\; \mathbb{R}^{16},
+  \label{eq:hv}
+\end{equation}
+yielding the full node feature matrix
+$\mathbf{X}_{\mathrm{node}}\in\mathbb{R}^{\num{30000}\times 16}$.
+
+% ---------------------------------------------------------------------------
+%  III-C  Variational Autoencoder Latent Space
+% ---------------------------------------------------------------------------
+\subsection{Variational Autoencoder Latent Space}
+\label{subsec:vae}
+
+\begin{definition}[$\beta$-VAE Anomaly Model]
+\label{def:vae}
+Let $\mathbf{x}\in\mathbb{R}^{20}$ be a min-max scaled tabular transaction
+feature vector.  A $\beta$-Variational Autoencoder comprises:
+\begin{enumerate}
+  \item An \emph{encoder} $q_{\phi}(\mathbf{z}|\mathbf{x}) =
+        \mathcal{N}\!\bigl(\boldsymbol{\mu}_{\phi}(\mathbf{x}),\;
+        \operatorname{diag}(\boldsymbol{\sigma}^{2}_{\phi}(\mathbf{x}))\bigr)$
+        with latent dimension $d=32$; and
+  \item A \emph{decoder} $p_{\theta}(\mathbf{x}|\mathbf{z})$ that
+        reconstructs $\hat{\mathbf{x}}$ from a sampled code
+        $\mathbf{z}\in\mathbb{R}^{32}$.
+\end{enumerate}
+\end{definition}
+
+\noindent\textbf{Training objective.}
+Parameters $\phi,\theta$ are jointly learned by maximizing the
+Evidence Lower BOund (ELBO):
+\begin{equation}
+  \mathcal{L}_{\mathrm{ELBO}}(\phi,\theta;\mathbf{x})
+    = \mathbb{E}_{q_{\phi}}\!\bigl[\log p_{\theta}(\mathbf{x}|\mathbf{z})\bigr]
+      - \beta\,\mathrm{KL}\!\Bigl(q_{\phi}(\mathbf{z}|\mathbf{x})
+        \,\big\|\,p(\mathbf{z})\Bigr),
+  \label{eq:elbo}
+\end{equation}
+where $p(\mathbf{z})=\mathcal{N}(\mathbf{0},\mathbf{I})$ and $\beta = 1.0$.
+
+\noindent\textbf{Anomaly scoring.}
+After training, the per-sample reconstruction error
+\begin{equation}
+  r(\mathbf{x})
+    = \bigl\|\mathbf{x} - \hat{\mathbf{x}}\bigr\|_{2}^{2}
+  \label{eq:recon}
+\end{equation}
+serves as a continuous anomaly score.
+A transaction is flagged as anomalous if
+$r(\mathbf{x}) > \tau_{\mathrm{rec}}$, where the threshold
+\begin{equation}
+  \tau_{\mathrm{rec}}
+    = \mathrm{Percentile}_{95}\!\bigl(r(\mathbf{x})\bigr)_{\mathbf{x}\in\mathcal{X}_{\mathrm{train}}}
+    = 0.1694
+  \label{eq:tau_rec}
+\end{equation}
+is set to the 95th percentile of reconstruction errors on the training set,
+ensuring a nominal false-positive rate of $5\%$.
+The full latent matrix
+$\mathbf{Z}_{\mathrm{all}} = \{\mathbf{z}_{i}\}_{i=1}^{N}
+\in\mathbb{R}^{N\times 32}$
+is retained for downstream density clustering.
+
+% ---------------------------------------------------------------------------
+%  III-D  HDBSCAN Density Clustering
+% ---------------------------------------------------------------------------
+\subsection{HDBSCAN Density Clustering}
+\label{subsec:hdbscan}
+
+\begin{definition}[Latent-Space Cluster Assignment]
+\label{def:hdbscan}
+Given $\mathbf{Z}_{\mathrm{all}}\in\mathbb{R}^{N\times 32}$, hierarchical
+density-based spatial clustering of applications with noise
+(HDBSCAN~\cite{campello2013density}) assigns each transaction a label
+\begin{equation}
+  c_{i} \;\in\; \{-1,\,0,\,1,\,\ldots,\,C-1\},
+  \label{eq:cluster_label}
+\end{equation}
+where $c_{i}=-1$ denotes a noise point and $C$ denotes the number of
+discovered clusters.
+\end{definition}
+
+\noindent\textbf{Empirical result.}
+Applied to our dataset, HDBSCAN discovers $C = 135$ clusters with
+\num{63390} noise points ($21.1\%$ of all transactions).
+HDBSCAN additionally provides \emph{soft membership probabilities}
+\begin{equation}
+  \mathbf{P}_{\mathrm{soft}}
+    \in [0,1]^{N\times C},
+  \qquad
+  \bigl(\mathbf{P}_{\mathrm{soft}}\bigr)_{ic}
+    = \Pr[c_{i} = c \mid \mathbf{z}_{i}],
+  \label{eq:soft}
+\end{equation}
+which are propagated to downstream modules as probabilistic cluster
+evidence rather than hard assignments.
+
+% ---------------------------------------------------------------------------
+%  III-E  Wasserstein Drift Detection
+% ---------------------------------------------------------------------------
+\subsection{Wasserstein Drift Detection}
+\label{subsec:wasserstein}
+
+\begin{definition}[Temporal Drift Score]
+\label{def:drift}
+Partition the $N$ transactions into $T=30$ non-overlapping monthly time
+windows $\{\mathcal{W}_{t}\}_{t=1}^{T}$.
+For each window $t$, let $D_t$ be the empirical distribution of cluster
+labels $\{c_{i}\}_{i\in\mathcal{W}_{t}}$.
+The \emph{Wasserstein drift score} between consecutive windows is
+\begin{equation}
+  d_{t}
+    = \mathcal{W}_{1}(D_{t-1},\, D_{t}),
+  \quad t = 2,\ldots,T,
+  \label{eq:wasserstein}
+\end{equation}
+where $\mathcal{W}_{1}(\cdot,\cdot)$ denotes the Wasserstein-$1$
+(earth-mover's) distance.  A drift alert is raised whenever
+$d_{t} > \delta$, i.e.,
+\begin{equation}
+  \mathcal{A}_{t} = \mathbf{1}\!\bigl[d_{t} > \delta\bigr],
+  \quad \delta = 0.1.
+  \label{eq:alert}
+\end{equation}
+\end{definition}
+
+\noindent\textbf{Empirical result.}
+All $T-1 = 29$ consecutive window pairs yield $\mathcal{A}_{t}=1$, with
+drift scores ranging from $0.179$ to $50.745$ (mean $8.500$), indicating
+persistent and substantial distributional shift in the Bitcoin transaction
+stream throughout the observation period.
+
+% ---------------------------------------------------------------------------
+%  III-F  Bayesian Trust Scoring
+% ---------------------------------------------------------------------------
+\subsection{Bayesian Trust Scoring}
+\label{subsec:trust}
+
+\begin{definition}[Bayesian Trust Score]
+\label{def:trust}
+For each wallet address $v$, let
+$\mathcal{T}_{v} = \{\mathbf{x}_{i}\}$ be the set of transactions
+associated with $v$.
+We model the \emph{trustworthiness} of $v$ as a latent probability
+$\rho_{v}\sim\mathrm{Beta}(\alpha,\beta)$ and update a Beta posterior
+sequentially over the transactions attributed to $v$.
+\end{definition}
+
+\noindent\textbf{Prior.}
+We adopt a symmetric, weakly informative prior:
+$\alpha_{0} = \beta_{0} = 2$, encoding mild belief that addresses are
+neither universally trustworthy nor universally anomalous.
+
+\noindent\textbf{Likelihood.}
+For each transaction $i\in\mathcal{T}_{v}$, define the \emph{likelihood
+weight}
+\begin{equation}
+  \ell_{i}
+    = \exp\!\bigl(-\kappa\,r(\mathbf{x}_{i})\bigr),
+  \quad \kappa = 1.0,
+  \label{eq:likelihood}
+\end{equation}
+where $r(\mathbf{x}_{i})$ is the VAE reconstruction error from
+\eqref{eq:recon}.  Transactions with low anomaly score contribute near-unity
+weight, while high-anomaly transactions contribute near-zero weight.
+
+\noindent\textbf{Posterior update.}
+The Beta posterior parameters after observing all transactions in
+$\mathcal{T}_{v}$ are
+\begin{align}
+  \alpha_{n} &= \alpha_{0} + \textstyle\sum_{i\in\mathcal{T}_{v}} \ell_{i},
+  \label{eq:alpha_n} \\
+  \beta_{n}  &= \beta_{0}  + \textstyle\sum_{i\in\mathcal{T}_{v}} (1 - \ell_{i}).
+  \label{eq:beta_n}
+\end{align}
+The \emph{trust score} of address $v$ is the posterior mean:
+\begin{equation}
+  \tau_{v}
+    = \mathbb{E}\!\bigl[\mathrm{Beta}(\alpha_{n},\beta_{n})\bigr]
+    = \frac{\alpha_{n}}{\alpha_{n} + \beta_{n}}
+    \;\in\; (0,1).
+  \label{eq:trust}
+\end{equation}
+Across $|\mathcal{V}^{*}|=\num{30000}$ hub addresses, the empirical trust
+distribution has mean $0.634$ and standard deviation $0.105$.
+
+% ---------------------------------------------------------------------------
+%  III-G  Markov Chain Behavioral Profiling
+% ---------------------------------------------------------------------------
+\subsection{Markov Chain Behavioral Profiling}
+\label{subsec:markov}
+
+\begin{definition}[Address Behavioral State]
+\label{def:markov}
+Associate with each transaction $i$ a \emph{behavioral state}
+$s_{i}\in\mathcal{S}$, where
+\begin{equation}
+  \mathcal{S}
+    = \{0,\,1,\,\ldots,\,C-1\} \cup \{\text{noise}\},
+  \quad |\mathcal{S}| = 136,
+  \label{eq:statespace}
+\end{equation}
+obtained from the HDBSCAN cluster label $c_{i}$ (with $c_{i}=-1$ mapped
+to the designated noise state).
+For each address $v$, the sequence of states
+$s_{(1)}^{v}, s_{(2)}^{v}, \ldots$ in chronological order defines a
+\emph{behavioral trajectory}.
+\end{definition}
+
+\noindent\textbf{Transition matrix.}
+The global transition probability matrix
+$\mathbf{P}\in\mathbb{R}^{|\mathcal{S}|\times|\mathcal{S}|}$
+is estimated from all observed consecutive-state pairs with Laplace smoothing:
+\begin{equation}
+  P_{jk}
+    = \frac{n_{jk} + \varepsilon}{\displaystyle\sum_{k'} (n_{jk'} + \varepsilon)},
+  \quad \varepsilon = 10^{-6},
+  \label{eq:transition}
+\end{equation}
+where $n_{jk}$ counts all transitions from state $j$ to state $k$ across all
+addresses.
+
+\noindent\textbf{Stationary distribution.}
+The stationary distribution $\boldsymbol{\pi}\in\mathbb{R}^{|\mathcal{S}|}$
+satisfies $\mathbf{P}^{\!\top}\boldsymbol{\pi} = \boldsymbol{\pi}$ and is
+computed via power iteration with tolerance $10^{-8}$.
+
+\noindent\textbf{Anomaly score.}
+For each address $v$, let $(s_{t-1}^{v}, s_{t}^{v})$ denote the most recently
+observed state transition.  The \emph{Markov anomaly score} is defined as
+\begin{equation}
+  \gamma_{v}
+    = -\log P_{s_{t-1}^{v},\,s_{t}^{v}},
+  \label{eq:markov_score}
+\end{equation}
+so that rare transitions yield large values.
+Across hub addresses, the empirical distribution of $\gamma_{v}$ has mean
+$0.875$ and maximum $1.058$.
+
+% ---------------------------------------------------------------------------
+%  III-H  GraphSAGE Classification
+% ---------------------------------------------------------------------------
+\subsection{GraphSAGE Node Classification}
+\label{subsec:graphsage}
+
+\begin{definition}[Composite Node Feature]
+\label{def:node_feature}
+For each hub node $v\in\mathcal{V}^{*}$, define the composite input feature
+vector
+\begin{equation}
+  \tilde{\mathbf{h}}_{v}^{(0)}
+    = \bigl[
+        \mathbf{h}_{v};\;
+        \tau_{v};\;
+        \gamma_{v};\;
+        \mathbf{e}_{c_{v}}
+      \bigr]
+    \;\in\; \mathbb{R}^{d_{\mathrm{in}}},
+  \label{eq:composite}
+\end{equation}
+where $\mathbf{h}_{v}\in\mathbb{R}^{16}$ is the spectral-augmented feature
+from~\eqref{eq:hv}, $\tau_{v}\in(0,1)$ is the Bayesian trust score
+from~\eqref{eq:trust}, $\gamma_{v}\in\mathbb{R}_{\geq 0}$ is the Markov
+anomaly score from~\eqref{eq:markov_score}, and
+$\mathbf{e}_{c_{v}}\in\{0,1\}^{\min(C,20)}$ is a one-hot cluster indicator
+(truncated to the 20 most frequent clusters for dimensionality control).
+Thus $d_{\mathrm{in}} = 16 + 1 + 1 + \min(135, 20) = 38$.
+\end{definition}
+
+\noindent\textbf{GraphSAGE propagation.}
+A two-layer GraphSAGE~\cite{hamilton2017inductive} network iteratively
+aggregates neighbor information:
+\begin{equation}
+  \mathbf{h}_{v}^{(l+1)}
+    = \sigma\!\Biggl(
+        \mathbf{W}^{(l)}\!
+        \cdot
+        \mathrm{MEAN}\!\Bigl(
+          \bigl\{\mathbf{h}_{v}^{(l)}\bigr\}
+          \cup
+          \bigl\{\mathbf{h}_{u}^{(l)} : u\in\mathcal{N}(v)\bigr\}
+        \Bigr)
+      \Biggr),
+  \label{eq:graphsage}
+\end{equation}
+where $\mathcal{N}(v)$ denotes the neighborhood of $v$ in $\mathcal{G}^{*}$,
+$\mathbf{W}^{(l)}$ is a learnable weight matrix, and $\sigma$ is the ReLU
+activation.  The final node embedding $\mathbf{h}_{v}^{(2)}$ is passed
+through a softmax head to predict the transaction-type label
+$\hat{y}_{v}\in\{0,1,\ldots,5\}$ over six classes.
+
+\noindent\textbf{Training.}
+Parameters are optimized with cross-entropy loss and the Adam optimizer,
+with early stopping (patience $= 15$ epochs) applied on a held-out
+validation split to prevent overfitting.
+
+% ---------------------------------------------------------------------------
+%  III-I  Formal Problem Statement
+% ---------------------------------------------------------------------------
+\subsection{Formal Problem Statement}
+\label{subsec:problem}
+
+We are now in a position to state the central problem addressed by SPECTRA.
+
+\begin{mdframed}[linewidth=0.8pt, innertopmargin=8pt, innerbottommargin=8pt,
+                 innerleftmargin=10pt, innerrightmargin=10pt]
+\begin{problem}[SPECTRA Inference Problem]
+\label{prob:spectra}
+\textbf{Given:}
+\begin{enumerate}
+  \item A directed weighted Bitcoin address graph
+        $\mathcal{G}=(\mathcal{V},\mathcal{E},\mathbf{W})$
+        constructed over $N=\num{300000}$ transactions, pruned to
+        hub subgraph $\mathcal{G}^{*}$ with $|\mathcal{V}^{*}|=\num{30000}$
+        nodes;
+  \item A tabular transaction feature matrix
+        $\mathbf{X}\in\mathbb{R}^{N\times 20}$; and
+  \item A temporal sequence $\mathcal{T} = (t_{1}, t_{2}, \ldots, t_{N})$
+        of transaction timestamps partitioned into $T=30$ monthly windows.
+\end{enumerate}
+
+\medskip
+\textbf{Find:}
+\begin{enumerate}
+  \item[\textbf{(F1)}] A cluster assignment
+        $c_{i}\in\{-1,0,\ldots,C-1\}$ for each transaction $i$, together
+        with soft membership probabilities $\mathbf{P}_{\mathrm{soft}}$,
+        that reflect latent behavioral patterns in the VAE latent space;
+  \item[\textbf{(F2)}] A trust score $\tau_{v}\in(0,1)$ for each hub address
+        $v\in\mathcal{V}^{*}$, certifying the aggregate anomaly level of
+        all transactions attributed to $v$;
+  \item[\textbf{(F3)}] A transaction-type prediction
+        $\hat{y}_{i}\in\{0,\ldots,5\}$ for each transaction $i$, produced
+        by the GraphSAGE classifier trained on the composed node features;
+        and
+  \item[\textbf{(F4)}] A sequence of binary drift alert flags
+        $\{\mathcal{A}_{t}\}_{t=2}^{T}$, signaling statistically significant
+        concept drift in the cluster-label distribution between consecutive
+        monthly windows.
+\end{enumerate}
+
+\medskip
+\textbf{Subject to:}
+\begin{enumerate}
+  \item[\textbf{(S1)}] \emph{Temporal fairness.} No temporal identifiers
+        (timestamps, block heights, or chronological indices) are used as
+        input features to \textbf{(F3)}, preventing the model from learning
+        spurious correlations with annotator conventions tied to particular
+        time periods.
+  \item[\textbf{(S2)}] \emph{Inductive generalization.} The GraphSAGE
+        classifier \textbf{(F3)} and the trust-scoring module \textbf{(F2)}
+        must generalize to wallet addresses unseen during training, relying
+        solely on the structural and latent-space features derivable from
+        the neighborhood of a new node in $\mathcal{G}$.
+\end{enumerate}
+\end{problem}
+\end{mdframed}
+
+\noindent
+Together, \textbf{(F1)}--\textbf{(F4)} constitute a \emph{multi-objective}
+inference problem whose outputs are jointly coherent: the cluster assignments
+inform the node features, the trust scores encode anomaly evidence, and the
+drift alerts provide actionable runtime signals about distribution shift.
+The next section details the SPECTRA architecture that realizes this
+formulation.

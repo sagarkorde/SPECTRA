@@ -1,0 +1,120 @@
+% =============================================================================
+%  SPECTRA — Contributions, Novelty Statement, and Abstract Draft
+%  Target: IEEE Transactions on Information Forensics & Security
+%  Author: Sagar Korde
+% =============================================================================
+
+% ─── ABSTRACT ────────────────────────────────────────────────────────────────
+
+\begin{abstract}
+Blockchain transaction analysis increasingly relies on graph-structured data,
+yet existing methods either ignore graph topology (tabular classifiers) or
+lack interpretable probabilistic guarantees (deep GNNs).
+We present \textsc{SPECTRA}
+(\textbf{S}pectral-\textbf{P}robabilistic \textbf{E}nsemble \textbf{C}lustering
+for \textbf{T}ransaction \textbf{R}ecognition and \textbf{A}uthentication),
+a seven-module framework that integrates spectral graph embeddings,
+Variational Autoencoder (VAE) latent representations, HDBSCAN density
+clustering, Wasserstein-distance temporal drift detection, Bayesian trust
+scoring, Markov-chain behavioral profiling, and GraphSAGE classification
+into a unified, interpretable pipeline.
+Unlike tabular classifiers that exploit label--feature entanglement inherent
+to rule-annotated Bitcoin datasets, SPECTRA operates purely on the
+address-level transaction graph, making its predictions robust to feature
+perturbation and temporally fair by construction.
+On the CryptoGraphNet benchmark (\num{300000} transactions, six transaction
+types), SPECTRA achieves \num{0.675} AUC-ROC and outperforms all
+graph-topology baselines---EvolveGCN
+($\Delta\text{AUC-ROC} = {-0.231}$) and AA-GNN
+($\Delta\text{AUC-ROC} = {-0.171}$)---while simultaneously providing
+per-address trust certificates, real-time concept-drift alerts, and
+interpretable cluster assignments unavailable in any single-objective baseline.
+Code and checkpoints are released at \url{https://github.com/[anonymized]}.
+\end{abstract}
+
+% ─── I. INTRODUCTION — Contributions paragraph ───────────────────────────────
+
+\paragraph*{Contributions}
+The primary contributions of this paper are as follows:
+
+\begin{enumerate}[leftmargin=*, label=\textbf{C\arabic*}]
+
+  \item \textbf{Spectral graph representation (Module~S).}
+    We construct a directed weighted Bitcoin address graph
+    $\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{W})$ and extract
+    $k$-dimensional node embeddings from the normalized graph Laplacian
+    via randomized SVD, providing provably convergent spectral features
+    for nodes of any connectivity degree.
+
+  \item \textbf{Probabilistic latent space (Module~E/C).}
+    A $\beta$-VAE encodes each transaction into a latent distribution
+    $q_\phi(\mathbf{z}|\mathbf{x}) = \mathcal{N}(\boldsymbol{\mu}, \boldsymbol{\sigma}^2\mathbf{I})$,
+    enabling principled anomaly scoring via ELBO reconstruction error
+    and density-based clustering (HDBSCAN) in the latent space.
+
+  \item \textbf{Temporal drift monitoring (Module~C).}
+    Wasserstein-$1$ distances between successive cluster-label distributions
+    are computed over configurable time windows, providing quantitative,
+    threshold-based alerts for concept drift in the transaction stream.
+
+  \item \textbf{Bayesian trust and Markov behavioral profiling (Modules~P/T).}
+    Per-address trust is maintained as a Beta posterior updated online
+    from reconstruction error likelihoods.
+    A Markov chain over cluster states captures address-level behavioral
+    trajectories, with anomaly scores derived from low-probability transitions.
+
+  \item \textbf{Inductive GraphSAGE classifier (Module~R).}
+    SPECTRA's final classification head is a two-layer GraphSAGE network
+    trained on node features that fuse all preceding module outputs.
+    Its inductive formulation generalizes to addresses unseen during training,
+    a critical property for live blockchain monitoring.
+
+  \item \textbf{Temporally-fair evaluation protocol.}
+    We identify and document label--feature entanglement in rule-annotated
+    blockchain datasets, propose a two-track evaluation protocol separating
+    tabular and graph-topology methods, and release temporally-fair baseline
+    results with \texttt{block\_height}, \texttt{block\_time}, and
+    \texttt{year} removed to prevent temporal-identity exploitation.
+
+  \item \textbf{Comprehensive reproducible benchmark.}
+    We evaluate ten IEEE-mandatory baselines (K-Means, DBSCAN, Isolation
+    Forest, AE+KMeans, HDBSCAN, XGBoost, EvolveGCN, BERT4ETH-BTC, Graph
+    Autoencoder, AA-GNN) and six ablation variants under identical
+    train/val/test splits, with all code, config, and checkpoints released.
+
+\end{enumerate}
+
+% ─── NOVELTY STATEMENT (for cover letter / response to reviewers) ─────────────
+
+\section*{Novelty Statement}
+
+\textsc{SPECTRA} advances the state of the art in three orthogonal dimensions:
+
+\paragraph{Algorithmic novelty.}
+Existing graph-based fraud detection systems are either purely spectral
+(no probabilistic guarantees), purely deep (no interpretability), or
+purely statistical (no graph structure).
+SPECTRA is the first framework to tightly integrate all five building blocks
+---spectral graph theory, variational inference, density clustering,
+Bayesian updating, and Markov chain modeling---into a single differentiable
+pipeline for Bitcoin transaction analysis.
+Randomized SVD replaces ARPACK eigensolver for graph Laplacian decomposition,
+resolving convergence failures on large sparse Bitcoin address graphs
+(up to $10^6$ nodes) and eliminating Python~3.12 GIL-related threading
+crashes in ARPACK's FORTRAN backend.
+
+\paragraph{Evaluation novelty.}
+We are the first to formally characterize label--feature entanglement
+in the CryptoGraphNet benchmark and to propose a principled two-track
+evaluation protocol that separates trivially solvable tabular classification
+from the genuinely hard graph-topology reasoning task.
+This distinction is essential for fair comparison in future work.
+
+\paragraph{Practical novelty.}
+SPECTRA produces four orthogonal outputs simultaneously---transaction-type
+predictions, per-address trust certificates ($\tau_v \in [0,1]$),
+Wasserstein drift alerts (flagged when $W_1 > \delta = 0.1$), and
+interpretable latent cluster assignments---none of which are available
+from any single baseline in isolation.
+This multi-output design directly addresses the operational requirements
+of blockchain forensics and anti-money-laundering (AML) practitioners.

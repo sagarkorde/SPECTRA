@@ -1,0 +1,255 @@
+% =============================================================================
+%  SPECTRA — Section V: Experimental Setup
+%  Target: IEEE Transactions on Information Forensics & Security
+%  Author: Sagar Korde
+% =============================================================================
+
+\section{Experimental Evaluation}
+\label{sec:experiments}
+
+% ─── V-A  Dataset ─────────────────────────────────────────────────────────────
+
+\subsection{Dataset}
+\label{subsec:dataset}
+
+We evaluate SPECTRA on the CryptoGraphNet dataset~\cite{cryptographnet2024},
+a publicly available corpus of Bitcoin transactions extracted from blocks
+mined between January 2009 and December 2023.
+The full dataset contains \num{5884387} transactions with \num{53} fields per
+record, including raw structural attributes (input/output counts, values, fees,
+script types), derived behavioral indicators, and assigned transaction-type labels.
+
+We draw a stratified sample of $N = \num{300000}$ transactions distributed
+uniformly across six transaction types:
+Standard ($n = \num{50000}$),
+Peer-to-Peer ($n = \num{50000}$),
+Consolidation ($n = \num{50000}$),
+Distribution ($n = \num{50000}$),
+Batch-Payment ($n = \num{50000}$), and
+CoinJoin-like ($n = \num{50000}$).
+The stratified sampling ensures balanced class representation despite the
+long-tailed distribution in the full corpus (Standard transactions dominate).
+
+The same \num{300000} transactions serve triple duty:
+(i)~as the ML classification dataset (70/15/15 stratified train/val/test split),
+(ii)~as the source graph for spectral embedding ($N_G = 300\,000$,
+pruned to $|\mathcal{V}| = 30\,000$ hub nodes by undirected degree), and
+(iii)~as the observation window for Wasserstein drift detection and
+Markov chain fitting.
+Using the same transaction pool for both graph construction and classification
+is a deliberate design choice that maximizes address coverage: the top-30\,000
+hub addresses selected by degree represent the most-connected actors
+(exchanges, mining pools, mixers) and appear in the highest fraction of
+all transactions.
+
+% ─── V-B  Feature Engineering ────────────────────────────────────────────────
+
+\subsection{Feature Engineering}
+\label{subsec:features}
+
+We begin with a raw feature matrix $\mathbf{X}_{\text{raw}} \in \mathbb{R}^{N \times 31}$
+obtained by dropping identifier columns (\texttt{txid}, address arrays,
+script type strings) and always-zero Boolean flags
+(\texttt{is\_self\_transfer}, \texttt{has\_taproot}, etc.)\ that carry no
+discriminative information.
+From the remaining 31 numeric features we compute Shannon entropy per column
+and select the top $k = 20$ features by Mutual Information (MI) with the
+transaction-type label~\cite{Kraskov2004}.
+
+The final \emph{temporally-fair} feature set $\mathbf{x}^{\dagger}$
+is obtained by additionally removing the three absolute temporal identifiers
+\texttt{block\_height}, \texttt{block\_time}, and \texttt{year}
+(see Section~\ref{subsec:label_provenance}).
+The 20 features selected after this temporal filtering are, in descending
+MI order: \texttt{weight}, \texttt{vsize}, \texttt{size}, \texttt{output\_count},
+\texttt{input\_count}, \texttt{fee\_rate\_sat\_per\_byte}, \texttt{fee},
+\texttt{value\_difference}, \texttt{fee\_rate\_sat\_per\_vbyte},
+\texttt{total\_output\_value}, \texttt{avg\_output\_value},
+\texttt{total\_input\_value}, \texttt{avg\_input\_value},
+\texttt{input\_output\_ratio}, \texttt{has\_op\_return}, \texttt{rbf\_enabled},
+\texttt{version}, \texttt{week\_of\_year}, \texttt{sample\_size},
+and \texttt{locktime}.
+All features are standardized to zero mean and unit variance on the training
+set; statistics are held fixed for validation and test sets.
+
+Additionally, Non-Negative Matrix Factorization (NMF) with $r = 10$ components
+decomposes the feature matrix to extract latent behavioral patterns
+(Module~E)~\cite{Lee1999}.
+The NMF basis vectors $\mathbf{H} \in \mathbb{R}^{10 \times 20}$ are reported
+as behavioral profiles in Fig.~\ref{fig:nmf_patterns}.
+
+% ─── V-C  Graph Construction ─────────────────────────────────────────────────
+
+\subsection{Graph Construction and Spectral Embedding}
+\label{subsec:graph}
+
+We construct a directed weighted graph
+$\mathcal{G} = (\mathcal{V}, \mathcal{E}, \mathbf{W})$
+where $\mathcal{V}$ is the set of unique wallet addresses,
+$(u, v) \in \mathcal{E}$ iff address $u$ sent BTC to address $v$ in at
+least one transaction, and edge weight $w_{uv}$ accumulates the total
+transferred value (BTC).
+Bitcoin addresses are parsed from VARCHAR[] fields using semicolon
+de-serialization as per the CryptoGraphNet data format.
+
+From the full \num{300000}-transaction graph (approximately $3 \times 10^6$
+raw nodes), we retain the top $|\mathcal{V}| = 30\,000$ nodes by
+undirected degree.
+These high-degree hubs correspond to exchanges, mining pools, and mixing
+services, which carry the most structural signal for the normalized
+Laplacian eigenvectors.
+The resulting pruned graph contains approximately $5 \times 10^6$ directed
+edges, representing the dense interconnection among the most active
+blockchain actors.
+
+The normalized graph Laplacian
+$\mathbf{L}_{\text{sym}} = \mathbf{D}^{-1/2}(\mathbf{D} - \mathbf{A}_{\text{sym}})\mathbf{D}^{-1/2}$,
+where $\mathbf{A}_{\text{sym}} = (\mathbf{A} + \mathbf{A}^\top)/2$
+symmetrizes the directed adjacency matrix, is decomposed via randomized SVD
+(sklearn, $n\_\text{iter}=10$, $n\_\text{oversamples}=20$)~\cite{Halko2011}
+to obtain the bottom $k = 10$ non-trivial eigenvectors
+$\boldsymbol{\Phi} \in \mathbb{R}^{30000 \times 10}$.
+Randomized SVD replaces the ARPACK eigensolver used in prior
+work~\cite{Kipf2016}, resolving convergence failures on this graph's
+density and Python~3.12 GIL-related threading crashes in ARPACK's
+FORTRAN backend.
+
+Each node's spectral features are augmented with six behavioral statistics
+computed from its transaction history:
+fan-in ratio, transaction velocity (tx/day), average received BTC,
+average sent BTC, mean and standard deviation of inter-transaction gap.
+The resulting node feature matrix is
+$\mathbf{X}_{\text{node}} \in \mathbb{R}^{30000 \times 16}$.
+
+% ─── V-D  Baseline Implementations ──────────────────────────────────────────
+
+\subsection{Baseline Implementations}
+\label{subsec:baselines}
+
+We implement ten IEEE-mandatory baselines under identical train/val/test splits
+and standardized feature inputs.
+All methods operate on either $\mathbf{X}^{\dagger}_{\text{scaled}} \in
+\mathbb{R}^{N \times 20}$ (tabular track) or the graph topology
+$(\mathcal{G}, \boldsymbol{\Phi})$ (graph-topology track).
+
+\begin{enumerate}[leftmargin=*, label=\textbf{B\arabic*}]
+
+  \item \textbf{K-Means}~\cite{Lloyd1982}: $k = 6$ clusters, $k$-means++
+    initialization. Evaluated by Silhouette coefficient, Davies-Bouldin index,
+    Calinski-Harabasz score, and Normalized Mutual Information (NMI).
+
+  \item \textbf{DBSCAN}~\cite{Ester1996}: $\varepsilon = 0.5$,
+    $\textit{minPts} = 10$. Noise points excluded from cluster metrics.
+
+  \item \textbf{Isolation Forest}~\cite{Liu2008}: contamination $= 0.05$.
+    Anomaly scores binarized at the 95th-percentile threshold.
+
+  \item \textbf{Autoencoder + K-Means}: Two-layer MLP autoencoder
+    (hidden dims $[64, 32]$, 30 epochs) followed by $k$-means on the
+    32-dimensional bottleneck. Represents deep unsupervised baseline without
+    probabilistic guarantees.
+
+  \item \textbf{Plain HDBSCAN}~\cite{McInnes2017}: $\textit{min\_cluster\_size}
+    = 100$, $\textit{min\_samples} = 10$, applied directly to
+    $\mathbf{X}^{\dagger}_{\text{scaled}}$ (no VAE encoding).
+    Isolates the contribution of VAE latent-space projection.
+
+  \item \textbf{XGBoost}~\cite{Chen2016}: $300$ trees, max depth $6$,
+    learning rate $0.05$. The strongest non-DL tabular baseline.
+
+  \item \textbf{EvolveGCN}~\cite{Pareja2020}: Simplified EvolveGCN-O variant
+    with GCN layers and LSTMCell weight evolution.
+    Applied in tabular mode (no edge index at inference) as in
+    Jha~\emph{et al.}~\cite{Jha2023}.
+
+  \item \textbf{BERT4ETH-BTC}~\cite{He2023}: Transformer encoder adapted
+    to Bitcoin address sequences.  Projection layer maps raw features to
+    embedding space; CLS-token representation fed to softmax head.
+
+  \item \textbf{Graph Autoencoder (GAE)}~\cite{Kipf2016b}: GCN encoder
+    with inner-product decoder, anomaly score = reconstruction error.
+    Bitcoin application per Liu~\emph{et al.}~\cite{Liu2024}.
+
+  \item \textbf{AA-GNN}~\cite{Fan2024}: GAT encoder with anomaly-aware
+    residual head trained via Focal Loss~\cite{Lin2017}.
+
+\end{enumerate}
+
+% ─── V-E  Evaluation Metrics ──────────────────────────────────────────────────
+
+\subsection{Evaluation Metrics}
+\label{subsec:metrics}
+
+For \textbf{classification} baselines (B6--B10, SPECTRA): accuracy,
+macro-F$_1$, weighted-F$_1$, macro-precision, macro-recall,
+AUC-ROC (one-vs-rest, macro-averaged), AUC-PR (macro-averaged),
+and Matthews Correlation Coefficient (MCC).
+
+For \textbf{clustering} baselines (B1--B5, B9):
+Silhouette coefficient ($\uparrow$), Davies-Bouldin index ($\downarrow$),
+Calinski-Harabasz score ($\uparrow$), and NMI ($\uparrow$).
+
+For \textbf{SPECTRA}'s additional outputs: Wasserstein-$1$ drift score
+per time window, per-address Bayesian trust score $\tau \in [0,1]$,
+and Markov chain stationarity convergence.
+
+All experiments use fixed seed $= 42$.
+Hardware: NVIDIA RTX 4060 Laptop GPU (8 GB VRAM), Intel Core i7,
+16 GB RAM, Windows 11, Python 3.10, PyTorch 2.7, PyG 2.6.
+
+% ─── References used above ───────────────────────────────────────────────────
+% Add to bibliography:
+%
+% \bibitem{Kraskov2004} A.~Kraskov, H.~Stögbauer, P.~Grassberger,
+%   ``Estimating mutual information,'' Phys.\ Rev.\ E, vol.~69, 2004.
+%
+% \bibitem{Lee1999} D.~D.~Lee and H.~S.~Seung,
+%   ``Learning the parts of objects by non-negative matrix factorization,''
+%   Nature, vol.~401, pp.~788--791, 1999.
+%
+% \bibitem{Halko2011} N.~Halko, P.-G.~Martinsson, J.~A.~Tropp,
+%   ``Finding structure with randomness: Probabilistic algorithms for
+%   constructing approximate matrix decompositions,''
+%   SIAM Rev., vol.~53, no.~2, pp.~217--288, 2011.
+%
+% \bibitem{Lloyd1982} S.~Lloyd, ``Least squares quantization in PCM,''
+%   IEEE Trans.\ Inf.\ Theory, vol.~28, pp.~129--137, 1982.
+%
+% \bibitem{Ester1996} M.~Ester et al., ``A density-based algorithm for
+%   discovering clusters in large spatial databases,'' KDD, 1996.
+%
+% \bibitem{Liu2008} F.~T.~Liu, K.~M.~Ting, Z.-H.~Zhou,
+%   ``Isolation Forest,'' ICDM, 2008.
+%
+% \bibitem{McInnes2017} L.~McInnes, J.~Healy, S.~Astels,
+%   ``hdbscan: Hierarchical density based clustering,''
+%   JOSS, vol.~2, no.~11, 2017.
+%
+% \bibitem{Chen2016} T.~Chen and C.~Guestrin,
+%   ``XGBoost: A scalable tree boosting system,'' KDD, 2016.
+%
+% \bibitem{Pareja2020} A.~Pareja et al.,
+%   ``EvolveGCN: Evolving graph convolutional networks for dynamic graphs,''
+%   AAAI, 2020.
+%
+% \bibitem{Jha2023} S.~Jha et al.,
+%   ``Temporal graph network for Bitcoin transaction analysis,''
+%   IEEE Trans.\ Inf.\ Forensics Security, vol.~18, 2023.
+%
+% \bibitem{He2023} Z.~He et al.,
+%   ``BERT4ETH: A pre-trained transformer for Ethereum transaction behavior
+%   sequence modeling,'' WWW, 2023.
+%
+% \bibitem{Kipf2016b} T.~N.~Kipf and M.~Welling,
+%   ``Variational graph auto-encoders,'' NIPS Workshop, 2016.
+%
+% \bibitem{Liu2024} Y.~Liu et al.,
+%   ``Graph autoencoder for blockchain anomaly detection,''
+%   IEEE Trans.\ Dependable Secure Comput., 2024.
+%
+% \bibitem{Fan2024} S.~Fan et al.,
+%   ``Anomaly-aware graph neural networks for blockchain transaction
+%   fraud detection,'' IEEE Trans.\ Ind.\ Inform., 2024.
+%
+% \bibitem{Lin2017} T.-Y.~Lin et al.,
+%   ``Focal loss for dense object detection,'' ICCV, 2017.

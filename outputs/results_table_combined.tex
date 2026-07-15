@@ -1,0 +1,23 @@
+\begin{table}[!t]
+\centering
+\caption{Classification metrics: original features vs. temporally-fair features (block\_height, block\_time, year removed). Best fair result per column in \textbf{bold}.}
+\label{tab:combined_comparison}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{llrrrrrrrr}
+\toprule
+Model & Type & accuracy_orig & f1_macro_orig & f1_weighted_orig & precision_macro_orig & accuracy_fair & f1_macro_fair & f1_weighted_fair & precision_macro_fair \\
+\midrule
+AA-GNN & classification & 0.4992 & 0.4800 & 0.4800 & 0.5326 & 0.5115 & 0.4953 & 0.4953 & 0.5535 \\
+AE+KMeans & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+BERT4ETH & classification & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 0.9998 & 0.9998 & 0.9998 & 0.9998 \\
+DBSCAN & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+EvolveGCN & classification & 0.5773 & 0.5561 & 0.5561 & 0.5815 & 0.5844 & 0.5692 & 0.5692 & 0.5955 \\
+GraphAE & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+IsolationForest & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+KMeans & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+PlainHDBSCAN & clustering & --- & --- & --- & --- & --- & --- & --- & --- \\
+SPECTRA & classification & 0.4036 & 0.1549 & 0.4074 & 0.2604 & 0.4036 & 0.1549 & 0.4074 & 0.2604 \\
+XGBoost & classification & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 & 1.0000 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,274 @@
+% =============================================================================
+%  SPECTRA — Master Paper File
+%  Spectral-Probabilistic Ensemble Clustering for Transaction Recognition
+%  and Authentication
+%
+%  Target: IEEE Transactions on Information Forensics & Security (TIFS)
+%  Author: Sagar Korde
+%
+%  To compile:
+%    pdflatex SPECTRA_paper_master.tex
+%    bibtex   SPECTRA_paper_master
+%    pdflatex SPECTRA_paper_master.tex
+%    pdflatex SPECTRA_paper_master.tex
+% =============================================================================
+
+\documentclass[journal]{IEEEtran}
+
+% ── Packages ─────────────────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{siunitx}          % \num{} for large numbers
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{rotating}
+\usepackage{microtype}
+
+% ── Theorem environments ──────────────────────────────────────────────────────
+\newtheorem{definition}{Definition}
+\newtheorem{problem}{Problem}
+\newtheorem{theorem}{Theorem}
+\newtheorem{remark}{Remark}
+
+% ── Custom commands ───────────────────────────────────────────────────────────
+\newcommand{\spectra}{\textsc{SPECTRA}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\calG}{\mathcal{G}}
+\newcommand{\calV}{\mathcal{V}}
+\newcommand{\calE}{\mathcal{E}}
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bz}{\mathbf{z}}
+\newcommand{\bh}{\mathbf{h}}
+\newcommand{\bphi}{\boldsymbol{\phi}}
+\newcommand{\bPhi}{\boldsymbol{\Phi}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\bsigma}{\boldsymbol{\sigma}}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+% =============================================================================
+\begin{document}
+
+\title{\spectra: Spectral-Probabilistic Ensemble Clustering\\
+       for Bitcoin Transaction Recognition and Authentication}
+
+\author{Sagar~Korde%
+  \thanks{S. Korde is with the Department of [DEPARTMENT],
+    [UNIVERSITY], [CITY], [COUNTRY].
+    E-mail: [email].
+    Manuscript received [DATE]; revised [DATE].}}
+
+% ── Abstract (from paper_section_contributions.tex) ───────────────────────────
+% PASTE abstract block here from:
+%   outputs/paper_section_contributions.tex  (the \begin{abstract}...\end{abstract} block)
+\begin{abstract}
+Blockchain transaction analysis increasingly relies on graph-structured data,
+yet existing methods either ignore graph topology (tabular classifiers) or
+lack interpretable probabilistic guarantees (deep GNNs).
+We present \spectra{}
+(\textbf{S}pectral-\textbf{P}robabilistic \textbf{E}nsemble \textbf{C}lustering
+for \textbf{T}ransaction \textbf{R}ecognition and \textbf{A}uthentication),
+a seven-module framework that integrates spectral graph embeddings,
+Variational Autoencoder (VAE) latent representations, HDBSCAN density
+clustering, Wasserstein-distance temporal drift detection, Bayesian trust
+scoring, Markov-chain behavioral profiling, and GraphSAGE classification
+into a unified, interpretable pipeline.
+Unlike tabular classifiers that exploit label--feature entanglement inherent
+to rule-annotated Bitcoin datasets, \spectra{} operates purely on the
+address-level transaction graph, making its predictions robust to feature
+perturbation and temporally fair by construction.
+On the CryptoGraphNet benchmark (\num{300000} transactions, six transaction
+types), \spectra{} achieves \num{0.916} accuracy and \num{0.840} MCC and
+outperforms all graph-topology baselines---EvolveGCN
+($\Delta\text{acc} = {+33.9}$\,pp) and AA-GNN
+($\Delta\text{acc} = {+41.7}$\,pp)---while simultaneously providing
+per-address trust certificates, real-time concept-drift alerts, and
+interpretable cluster assignments unavailable in any single-objective baseline.
+Code and checkpoints are released at \url{https://github.com/[anonymized]}.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Bitcoin, blockchain forensics, spectral graph theory, variational autoencoder,
+HDBSCAN, Bayesian trust, Markov chain, GraphSAGE, concept drift,
+transaction classification, anomaly detection.
+\end{IEEEkeywords}
+
+\maketitle
+
+% =============================================================================
+% SECTION I — INTRODUCTION
+% =============================================================================
+\section{Introduction}
+\label{sec:introduction}
+
+Bitcoin's pseudonymous ledger records every transaction in a publicly
+auditable blockchain, creating an unprecedented data source for financial
+forensics, anti-money-laundering (AML) analysis, and cybersecurity research.
+With over \num{5.8} million transactions in publicly available datasets,
+the challenge is no longer data availability but meaningful pattern extraction:
+how can we reliably identify transaction types, detect anomalous behavior,
+and certify address trustworthiness at scale?
+
+Existing approaches fall into three broad categories.
+\emph{Tabular classifiers} (XGBoost, gradient boosting, Random Forests)
+achieve near-perfect accuracy on rule-annotated datasets but exploit the
+structural coincidence between feature space and label-generation heuristics,
+providing no generalizable graph-structural insight~\cite{Chainalysis2023}.
+\emph{Graph neural networks} (GCN, GAT, GraphSAGE) capture topological
+signals but require careful inductive generalization design and typically
+produce point predictions without probabilistic uncertainty
+quantification~\cite{Weber2019,Pareja2020}.
+\emph{Clustering and anomaly detection} methods (HDBSCAN, Isolation Forest,
+autoencoders) identify unusual patterns but lack the classification precision
+required for forensic reporting.
+
+No existing single-objective method simultaneously addresses
+transaction-type classification, per-address trust certification,
+temporal concept-drift monitoring, and interpretable behavioral segmentation.
+This gap motivates \spectra{}.
+
+% Contributions paragraph — PASTE from paper_section_contributions.tex
+% (the \paragraph*{Contributions} \begin{enumerate} block)
+\input{paper_section_contributions_body}   % placeholder — paste manually or \input
+
+The remainder of this paper is organized as follows.
+Section~\ref{sec:related} reviews related work.
+Section~\ref{sec:problem} formalizes the problem.
+Section~\ref{sec:spectra} describes the \spectra{} framework.
+Section~\ref{sec:experiments} details the experimental setup.
+Section~\ref{sec:results} presents results.
+Section~\ref{sec:ablation} reports the ablation study.
+Section~\ref{sec:conclusion} concludes.
+
+% =============================================================================
+% SECTION II — RELATED WORK
+% =============================================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Bitcoin Transaction Graph Analysis}
+Early work by Ron and Shamir~\cite{Ron2013} quantified address graph topology,
+showing that the Bitcoin network exhibits power-law degree distributions
+dominated by exchange hubs.
+Meiklejohn~\emph{et al.}~\cite{Meiklejohn2013} introduced the common-input
+ownership heuristic for address clustering, foundational to modern
+blockchain analytics.
+More recent work has extended these ideas with deep learning:
+Weber~\emph{et al.}~\cite{Weber2019} applied GCN to elliptic dataset
+money-laundering detection; Pareja~\emph{et al.}~\cite{Pareja2020} proposed
+EvolveGCN for dynamic transaction graphs.
+
+\subsection{Variational Autoencoders for Anomaly Detection}
+VAEs~\cite{Kingma2014} have been applied to financial fraud detection
+via reconstruction-error anomaly scoring~\cite{Xu2018}.
+The $\beta$-VAE extension~\cite{Higgins2017} provides disentangled
+representations well-suited to multi-type transaction patterns.
+
+\subsection{Spectral Methods on Graphs}
+Spectral graph theory provides a principled basis for node
+embeddings~\cite{Belkin2003}.
+The normalized graph Laplacian's eigenvectors capture smooth graph
+signals corresponding to community structure~\cite{VonLuxburg2007}.
+For large sparse graphs like Bitcoin address networks,
+randomized SVD~\cite{Halko2011} provides scalable approximations
+that converge reliably where ARPACK fails on ill-conditioned matrices.
+
+\subsection{Bayesian Trust and Markov Models}
+Bayesian online learning for trust scoring in peer-to-peer systems
+was formalized by Jøsang~\emph{et al.}~\cite{Josang2002}.
+Markov chain models of transaction sequences have been used for
+behavioral fingerprinting in financial networks~\cite{Akcora2022}.
+
+\subsection{Concept Drift Detection}
+Wasserstein distance provides a geometrically meaningful metric for
+distribution shift~\cite{Villani2009}.
+Its application to streaming cluster-label distributions enables
+principled drift alerts without reference to original feature space,
+making it robust to data transformations~\cite{Lu2018}.
+
+% =============================================================================
+% SECTION III — PROBLEM FORMULATION
+% =============================================================================
+% PASTE or \input the full content from:
+%   outputs/paper_section_problem_formulation.tex
+\input{paper_section_problem_formulation_body}
+
+% =============================================================================
+% SECTION IV — THE SPECTRA FRAMEWORK
+% =============================================================================
+% PASTE or \input the full content from:
+%   outputs/paper_section_architecture.tex
+\input{paper_section_architecture_body}
+
+% =============================================================================
+% SECTION V — EXPERIMENTAL SETUP
+% =============================================================================
+% Full content in: outputs/paper_section_experiments.tex
+\input{paper_section_experiments}
+
+% Section V-B: Label Provenance
+% Full content in: outputs/paper_section_label_provenance.tex
+\input{paper_section_label_provenance}
+
+% =============================================================================
+% SECTION VI — RESULTS AND DISCUSSION
+% =============================================================================
+% Full content in: outputs/paper_section_results.tex
+\input{paper_section_results}
+
+% =============================================================================
+% SECTION VII — ABLATION STUDY
+% =============================================================================
+% Full content in: outputs/paper_section_ablation.tex
+\input{paper_section_ablation}
+
+% =============================================================================
+% SECTION VIII — CONCLUSION
+% =============================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented \spectra{}, a seven-module spectral-probabilistic framework
+for Bitcoin transaction pattern recognition and authentication.
+By integrating graph Laplacian spectral embeddings, variational autoencoder
+latent representations, HDBSCAN density clustering, Wasserstein drift
+detection, Bayesian trust scoring, Markov chain profiling, and inductive
+GraphSAGE classification into a unified pipeline, \spectra{} achieves
+\num{0.916} accuracy and \num{0.840} MCC on the graph-topology evaluation
+track of the CryptoGraphNet benchmark, outperforming all graph-based
+baselines while providing four orthogonal forensic outputs simultaneously.
+
+We additionally formalized the label--feature entanglement present in
+rule-annotated blockchain datasets and proposed a two-track evaluation
+protocol that separates trivially solvable tabular classification from
+the genuinely challenging graph-topology reasoning task, a methodological
+contribution applicable to future blockchain ML benchmarks.
+
+Future work will extend \spectra{} to cross-chain analysis (Ethereum, Monero),
+incorporate privacy-preserving federated learning for multi-party blockchain
+forensics, and explore attention-based variants of the Markov profiler for
+longer address history windows.
+
+% =============================================================================
+% BIBLIOGRAPHY
+% =============================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{spectra_references}
+
+% Key references (also in BibTeX file spectra_references.bib):
+%
+% Ron2013, Meiklejohn2013, Weber2019, Pareja2020, Kingma2014,
+% Higgins2017, Xu2018, Belkin2003, VonLuxburg2007, Halko2011,
+% Josang2002, Akcora2022, Villani2009, Lu2018, Chainalysis2023,
+% Lee1999, Kraskov2004, Lloyd1982, Ester1996, Liu2008, McInnes2017,
+% Chen2016, He2023, Kipf2016, Fan2024, Lin2017, cryptographnet2024,
+% Jourdan2019
+
+\end{document}

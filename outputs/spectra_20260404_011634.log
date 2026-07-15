@@ -1,0 +1,29 @@
+01:16:34 [INFO] spectra - ======================================================================
+01:16:34 [INFO] spectra -   SPECTRA — Spectral-Probabilistic Ensemble Clustering
+01:16:34 [INFO] spectra -   for Transaction Recognition and Authentication
+01:16:34 [INFO] spectra -   Author: Sagar Korde | Target: IEEE TIFS
+01:16:34 [INFO] spectra - ======================================================================
+01:16:34 [INFO] spectra - Config: config.yaml | Phase: all
+01:16:34 [INFO] spectra - Device: cuda | CUDA: NVIDIA GeForce RTX 4060 Laptop GPU
+01:16:34 [INFO] numexpr.utils - Note: NumExpr detected 32 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 8.
+01:16:34 [INFO] numexpr.utils - NumExpr defaulting to 8 threads.
+01:16:35 [INFO] spectra.pipeline - SPECTRA Pipeline initialized | device=cuda | seed=42
+01:16:35 [INFO] spectra.pipeline - >> SPECTRA pipeline starting ...
+01:16:35 [INFO] spectra.pipeline - ============================================================
+01:16:35 [INFO] spectra.pipeline - [Phase 1] DATA PIPELINE
+01:16:35 [INFO] spectra.pipeline - ============================================================
+01:17:07 [INFO] spectra.graph - Loaded 5884387 rows x 53 cols from C:/Users/sagar/Desktop/CryptoGraphNet/Dataset.parquet
+01:17:08 [INFO] spectra.graph - Sampled 300000 rows — class distribution: {0: 50000, 1: 50000, 2: 50000, 5: 50000, 3: 50000, 4: 50000}
+01:17:10 [INFO] spectra.features - Feature matrix: 300000 × 31
+01:17:11 [INFO] spectra.features - [Module E] Computing mutual information …
+01:17:37 [INFO] spectra.features - Top-5 features by MI: [('weight', 1.3196), ('vsize', 1.2043), ('size', 1.1926), ('output_count', 1.1714), ('input_count', 0.7261)]
+01:17:37 [INFO] spectra.features - Selected 20 features: ['block_height', 'block_time', 'version', 'locktime', 'size', 'vsize', 'weight', 'input_count', 'output_count', 'total_input_value', 'total_output_value', 'fee', 'has_coinbase', 'has_op_return', 'rbf_enabled', 'hour', 'day_of_week', 'week_of_year', 'year', 'input_output_ratio']
+01:17:37 [INFO] spectra.features - [Module E] Running NMF (r=10) …
+01:17:37 [INFO] spectra.features - [Module E] NMF reconstruction error: 1051.4349 | explained components: 10
+01:17:38 [INFO] spectra.pipeline - [Phase 1] Building spectral graph on 150000 rows ...
+01:17:38 [INFO] spectra.graph - [Module S] Extracting address pairs ...
+01:17:43 [INFO] spectra.graph - [Module S] Building graph ...
+01:18:00 [INFO] spectra.graph - Graph: 1519519 nodes | 14548576 edges
+01:18:00 [INFO] spectra.graph - [Module S] Computing Laplacian ...
+01:18:12 [INFO] spectra.graph - [Module S] Extracting spectral embeddings ...
+01:18:12 [INFO] spectra.graph - Computing top-10 eigenvectors of L (1519519 x 1519519) ...

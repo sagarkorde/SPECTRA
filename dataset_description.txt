@@ -1,0 +1,303 @@
+Dataset Description Report
+================================================================================
+Source file: C:/Users/sagar/Desktop/Q2 Paper 21326/Dataset.parquet
+Generated on: 2026-04-04T00:13:52
+Rows: 5884387
+Columns: 53
+Row groups: 51
+Created by: DuckDB version v1.4.3 (build d1dc88f950)
+Parquet format version: 1.0
+
+1. Column Names
+--------------------------------------------------------------------------------
+ 1. txid (VARCHAR)
+ 2. block_height (INTEGER)
+ 3. block_time (BIGINT)
+ 4. version (INTEGER)
+ 5. locktime (INTEGER)
+ 6. size (INTEGER)
+ 7. vsize (INTEGER)
+ 8. weight (INTEGER)
+ 9. input_count (INTEGER)
+10. output_count (INTEGER)
+11. total_input_value (FLOAT)
+12. total_output_value (FLOAT)
+13. fee (FLOAT)
+14. input_addresses (VARCHAR[])
+15. output_addresses (VARCHAR[])
+16. input_script_types (VARCHAR[])
+17. output_script_types (VARCHAR[])
+18. has_coinbase (BOOLEAN)
+19. has_op_return (BOOLEAN)
+20. op_return_data (VARCHAR)
+21. rbf_enabled (BOOLEAN)
+22. timestamp (TIMESTAMP_NS)
+23. hour (INTEGER)
+24. day_of_week (INTEGER)
+25. week_of_year (INTEGER)
+26. year (INTEGER)
+27. input_output_ratio (FLOAT)
+28. value_difference (FLOAT)
+29. fee_rate_sat_per_byte (FLOAT)
+30. fee_rate_sat_per_vbyte (FLOAT)
+31. input_address_count (INTEGER)
+32. output_address_count (INTEGER)
+33. total_addresses (INTEGER)
+34. input_script_count (INTEGER)
+35. output_script_count (INTEGER)
+36. address_reuse (INTEGER)
+37. is_self_transfer (BOOLEAN)
+38. is_consolidation (BOOLEAN)
+39. is_distribution (BOOLEAN)
+40. is_peer_to_peer (BOOLEAN)
+41. is_batch_payment (BOOLEAN)
+42. is_coinjoin_like (BOOLEAN)
+43. has_p2pk (BOOLEAN)
+44. has_p2pkh (BOOLEAN)
+45. has_p2sh (BOOLEAN)
+46. has_p2wpkh (BOOLEAN)
+47. has_p2wsh (BOOLEAN)
+48. has_taproot (BOOLEAN)
+49. avg_input_value (FLOAT)
+50. avg_output_value (FLOAT)
+51. value_concentration_ratio (FLOAT)
+52. month_1 (VARCHAR)
+53. sample_size (INTEGER)
+
+2. Sample Rows
+--------------------------------------------------------------------------------
+Row 1:
+{
+  "txid": "6154ae7f6aa9adc14a73c8e9e9e0f55157982360558baf18a466a545cd4b35f9",
+  "block_height": 841843,
+  "block_time": 1714692859,
+  "version": 2,
+  "locktime": 0,
+  "size": 183,
+  "vsize": 132,
+  "weight": 528,
+  "input_count": 1,
+  "output_count": 2,
+  "total_input_value": 0.00040536001324653625,
+  "total_output_value": 0.000378700002329424,
+  "fee": 2.666000000317581e-05,
+  "input_addresses": "bc1pey9zwypd5tneda3j265shvm452k4dqg22ptwm4r4vgnze33zdlsq62x5x4",
+  "output_addresses": "bc1pey9zwypd5tneda3j265shvm452k4dqg22ptwm4r4vgnze33zdlsq62x5x4",
+  "input_script_types": "witness_v1_taproot",
+  "output_script_types": "witness_v1_taproot;nulldata",
+  "has_coinbase": false,
+  "has_op_return": true,
+  "op_return_data": "6a5d0914f7a3331493031600",
+  "rbf_enabled": false,
+  "timestamp": "2024-05-02T23:34:19",
+  "hour": 23,
+  "day_of_week": 3,
+  "week_of_year": 18,
+  "year": 2024,
+  "input_output_ratio": 1.0703986883163452,
+  "value_difference": 2.666000000317581e-05,
+  "fee_rate_sat_per_byte": 1.4568306028195366e-07,
+  "fee_rate_sat_per_vbyte": 2.0196969785502006e-07,
+  "input_address_count": 1,
+  "output_address_count": 1,
+  "total_addresses": 2,
+  "input_script_count": 1,
+  "output_script_count": 1,
+  "address_reuse": 0,
+  "is_self_transfer": false,
+  "is_consolidation": false,
+  "is_distribution": false,
+  "is_peer_to_peer": false,
+  "is_batch_payment": false,
+  "is_coinjoin_like": false,
+  "has_p2pk": false,
+  "has_p2pkh": false,
+  "has_p2sh": false,
+  "has_p2wpkh": false,
+  "has_p2wsh": false,
+  "has_taproot": false,
+  "avg_input_value": 0.00040536001324653625,
+  "avg_output_value": 0.000189350001164712,
+  "value_concentration_ratio": 1.0,
+  "month_1": "2024-05",
+  "sample_size": 635948
+}
+
+Row 2:
+{
+  "txid": "7839ce79c47371b8d199a880cfebb53b5f9cb97e85716e30ac824c630a159193",
+  "block_height": 843464,
+  "block_time": 1715713818,
+  "version": 2,
+  "locktime": 843463,
+  "size": 222,
+  "vsize": 141,
+  "weight": 561,
+  "input_count": 1,
+  "output_count": 2,
+  "total_input_value": 0.07981222122907639,
+  "total_output_value": 0.07978110760450363,
+  "fee": 3.111000114586204e-05,
+  "input_addresses": "bc1qd0s3nuvckysuv6esfywqm76y73mv4ay0ewqsgc",
+  "output_addresses": "bc1qsqzlettsx3stnhkxa474x3vk5ruylk32h52lxu;bc1qfflwcejf32w4nm55nd4el69ylrza556elf6e26",
+  "input_script_types": "witness_v0_keyhash",
+  "output_script_types": "witness_v0_keyhash;witness_v0_keyhash",
+  "has_coinbase": false,
+  "has_op_return": false,
+  "op_return_data": "",
+  "rbf_enabled": false,
+  "timestamp": "2024-05-14T19:10:18",
+  "hour": 19,
+  "day_of_week": 1,
+  "week_of_year": 20,
+  "year": 2024,
+  "input_output_ratio": 1.0003899335861206,
+  "value_difference": 3.111000114586204e-05,
+  "fee_rate_sat_per_byte": 1.4013512839028408e-07,
+  "fee_rate_sat_per_vbyte": 2.2063829874241492e-07,
+  "input_address_count": 1,
+  "output_address_count": 1,
+  "total_addresses": 2,
+  "input_script_count": 1,
+  "output_script_count": 1,
+  "address_reuse": 0,
+  "is_self_transfer": false,
+  "is_consolidation": false,
+  "is_distribution": false,
+  "is_peer_to_peer": false,
+  "is_batch_payment": false,
+  "is_coinjoin_like": false,
+  "has_p2pk": false,
+  "has_p2pkh": false,
+  "has_p2sh": false,
+  "has_p2wpkh": false,
+  "has_p2wsh": false,
+  "has_taproot": false,
+  "avg_input_value": 0.07981222122907639,
+  "avg_output_value": 0.039890553802251816,
+  "value_concentration_ratio": 1.0,
+  "month_1": "2024-05",
+  "sample_size": 635948
+}
+
+Row 3:
+{
+  "txid": "0bf6b16368c2bcb30e8959ab6ae34d1dc0ab372c0b6a26cf0aae926d3fbfce25",
+  "block_height": 790318,
+  "block_time": 1684410985,
+  "version": 2,
+  "locktime": 0,
+  "size": 327,
+  "vsize": 153,
+  "weight": 609,
+  "input_count": 1,
+  "output_count": 1,
+  "total_input_value": 0.00015080999583005905,
+  "total_output_value": 5.4600000112259295e-06,
+  "fee": 0.00014535000082105398,
+  "input_addresses": "bc1pcryr4yjuyp4ravzmfjelq70psdvu0fanhzqk6vpznhmkf9m0ftaszdukk9",
+  "output_addresses": "bc1pcg5af5em9wp7svkmxcjg4v0lnzkwn90jr3u072uhul7w5aw3czrq7rcfzq",
+  "input_script_types": "witness_v1_taproot",
+  "output_script_types": "witness_v1_taproot",
+  "has_coinbase": false,
+  "has_op_return": false,
+  "op_return_data": "",
+  "rbf_enabled": true,
+  "timestamp": "2023-05-18T11:56:25",
+  "hour": 11,
+  "day_of_week": 3,
+  "week_of_year": 20,
+  "year": 2023,
+  "input_output_ratio": 27.620878219604492,
+  "value_difference": 0.00014535000082105398,
+  "fee_rate_sat_per_byte": 4.4449541292124195e-07,
+  "fee_rate_sat_per_vbyte": 9.500000146545062e-07,
+  "input_address_count": 1,
+  "output_address_count": 1,
+  "total_addresses": 2,
+  "input_script_count": 1,
+  "output_script_count": 1,
+  "address_reuse": 0,
+  "is_self_transfer": false,
+  "is_consolidation": false,
+  "is_distribution": false,
+  "is_peer_to_peer": true,
+  "is_batch_payment": false,
+  "is_coinjoin_like": false,
+  "has_p2pk": false,
+  "has_p2pkh": false,
+  "has_p2sh": false,
+  "has_p2wpkh": false,
+  "has_p2wsh": false,
+  "has_taproot": false,
+  "avg_input_value": 0.00015080999583005905,
+  "avg_output_value": 5.4600000112259295e-06,
+  "value_concentration_ratio": 1.0,
+  "month_1": "2023-05",
+  "sample_size": 635948
+}
+
+3. Attribute Completeness and Descriptive Statistics
+--------------------------------------------------------------------------------
+txid [VARCHAR] | nulls=0 (0.0000%) | example="6154ae7f6aa9adc14a73c8e9e9e0f55157982360558baf18a466a545cd4b35f9"
+block_height [INTEGER] | nulls=0 (0.0000%) | mean=815166.3467586343 | stddev=30875.3220253076 | min=744837 | max=903456
+block_time [BIGINT] | nulls=0 (0.0000%) | mean=1699070448.837804 | stddev=18168911.446384426 | min=1657722009 | max=1751329316
+version [INTEGER] | nulls=0 (0.0000%) | mean=1.6682828644682954 | stddev=0.470830027928417 | min=1 | max=2
+locktime [INTEGER] | nulls=0 (0.0000%) | mean=612333.9303861217 | stddev=28196834.681849755 | min=-2147475212 | max=2145946477
+size [INTEGER] | nulls=0 (0.0000%) | mean=548.4184808035229 | stddev=4097.640217052528 | min=137 | max=3991717
+vsize [INTEGER] | nulls=0 (0.0000%) | mean=325.1133436668934 | stddev=1862.4699711163412 | min=86 | max=998000
+weight [INTEGER] | nulls=0 (0.0000%) | mean=1298.8249499905428 | stddev=7449.931263353667 | min=344 | max=3991999
+input_count [INTEGER] | nulls=0 (0.0000%) | mean=2.2754929273006685 | stddev=16.731592593963295 | min=1 | max=1794
+output_count [INTEGER] | nulls=0 (0.0000%) | mean=2.7853762847345016 | stddev=16.75991695373803 | min=1 | max=3199
+total_input_value [FLOAT] | nulls=0 (0.0000%) | mean=2.575131466175672 | stddev=98.10345425166504 | min=0.0 | max=87051.03125
+total_output_value [FLOAT] | nulls=0 (0.0000%) | mean=2.5769950996243125 | stddev=98.10345650149144 | min=0.0 | max=87051.03125
+fee [FLOAT] | nulls=0 (0.0000%) | mean=0.0001294320266979045 | stddev=0.008217242736796505 | min=-4.689582056016661e-13 | max=19.821086883544922
+input_addresses [VARCHAR[]] | nulls=0 (0.0000%) | example=["bc1pey9zwypd5tneda3j265shvm452k4dqg22ptwm4r4vgnze33zdlsq62x5x4"]
+output_addresses [VARCHAR[]] | nulls=0 (0.0000%) | example=["bc1pey9zwypd5tneda3j265shvm452k4dqg22ptwm4r4vgnze33zdlsq62x5x4"]
+input_script_types [VARCHAR[]] | nulls=0 (0.0000%) | example=["witness_v1_taproot"]
+output_script_types [VARCHAR[]] | nulls=0 (0.0000%) | example=["witness_v1_taproot;nulldata"]
+has_coinbase [BOOLEAN] | nulls=0 (0.0000%) | true_count=1975 | false_count=5882412
+has_op_return [BOOLEAN] | nulls=0 (0.0000%) | true_count=1119564 | false_count=4764823
+op_return_data [VARCHAR] | nulls=0 (0.0000%) | example="6a5d0914f7a3331493031600"
+rbf_enabled [BOOLEAN] | nulls=0 (0.0000%) | true_count=3351878 | false_count=2532509
+timestamp [TIMESTAMP_NS] | nulls=0 (0.0000%) | min=2022-07-13T14:20:09 | max=2025-07-01T00:21:56
+hour [INTEGER] | nulls=0 (0.0000%) | mean=11.627184955714164 | stddev=6.848567589527941 | min=0 | max=23
+day_of_week [INTEGER] | nulls=0 (0.0000%) | mean=3.0226606441758506 | stddev=2.013102899457989 | min=0 | max=6
+week_of_year [INTEGER] | nulls=0 (0.0000%) | mean=26.941220725285405 | stddev=13.813929247308646 | min=1 | max=52
+year [INTEGER] | nulls=0 (0.0000%) | mean=2023.3325568151788 | stddev=0.6598954977623391 | min=2022 | max=2025
+input_output_ratio [FLOAT] | nulls=0 (0.0000%) | mean=5.063681836180269 | stddev=19.790472239184787 | min=0.0 | max=18176.697265625
+value_difference [FLOAT] | nulls=0 (0.0000%) | mean=-0.001863634135139697 | stddev=0.11229783827792568 | min=-13.713275909423828 | max=19.821086883544922
+fee_rate_sat_per_byte [FLOAT] | nulls=0 (0.0000%) | mean=2.9984883239821446e-07 | stddev=2.523380569519563e-05 | min=-2.1580644218779735e-17 | max=0.06117619201540947
+fee_rate_sat_per_vbyte [FLOAT] | nulls=0 (0.0000%) | mean=4.798459656677681e-07 | stddev=3.3652100225857306e-05 | min=-2.1580644218779735e-17 | max=0.08156825602054596
+input_address_count [INTEGER] | nulls=0 (0.0000%) | mean=0.9996635163526804 | stddev=0.018340405754450846 | min=0 | max=1
+output_address_count [INTEGER] | nulls=0 (0.0000%) | mean=0.999838895708253 | stddev=0.01269166515978081 | min=0 | max=1
+total_addresses [INTEGER] | nulls=0 (0.0000%) | mean=1.9995024120609335 | stddev=0.022316366077112376 | min=0 | max=2
+input_script_count [INTEGER] | nulls=0 (0.0000%) | mean=0.9996643660588606 | stddev=0.01831724182337396 | min=0 | max=1
+output_script_count [INTEGER] | nulls=0 (0.0000%) | mean=1.0 | stddev=0.0 | min=1 | max=1
+address_reuse [INTEGER] | nulls=0 (0.0000%) | mean=0.0 | stddev=0.0 | min=0 | max=0
+is_self_transfer [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+is_consolidation [BOOLEAN] | nulls=0 (0.0000%) | true_count=369919 | false_count=5514468
+is_distribution [BOOLEAN] | nulls=0 (0.0000%) | true_count=554722 | false_count=5329665
+is_peer_to_peer [BOOLEAN] | nulls=0 (0.0000%) | true_count=1842344 | false_count=4042043
+is_batch_payment [BOOLEAN] | nulls=0 (0.0000%) | true_count=137743 | false_count=5746644
+is_coinjoin_like [BOOLEAN] | nulls=0 (0.0000%) | true_count=110352 | false_count=5774035
+has_p2pk [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+has_p2pkh [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+has_p2sh [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+has_p2wpkh [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+has_p2wsh [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+has_taproot [BOOLEAN] | nulls=0 (0.0000%) | true_count=0 | false_count=5884387
+avg_input_value [FLOAT] | nulls=0 (0.0000%) | mean=2.0677036450567114 | stddev=80.86808364292799 | min=0.0 | max=87051.03125
+avg_output_value [FLOAT] | nulls=0 (0.0000%) | mean=1.1641113952533042 | stddev=50.085155178910696 | min=0.0 | max=43525.515625
+value_concentration_ratio [FLOAT] | nulls=0 (0.0000%) | mean=0.9998402486633831 | stddev=0.012638008882435865 | min=0.0 | max=1.0
+month_1 [VARCHAR] | nulls=0 (0.0000%) | example="2024-05"
+sample_size [INTEGER] | nulls=0 (0.0000%) | mean=528683.1276673339 | stddev=142568.00766814547 | min=298927 | max=736188
+
+4. Quick Observations
+--------------------------------------------------------------------------------
+- All columns have null_count=0: True
+- Timestamp coverage: 2022-07-13T14:20:09 to 2025-07-01T00:21:56
+- Boolean columns that are always false: is_self_transfer, has_p2pk, has_p2pkh, has_p2sh, has_p2wpkh, has_p2wsh, has_taproot
+- Numeric columns that are always 0: address_reuse
+- Numeric columns that are always 1: output_script_count
+- Data-quality note: has_taproot is always false even though sample rows contain witness_v1_taproot in script type fields; verify how this flag was engineered.

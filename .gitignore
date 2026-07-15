@@ -1,0 +1,14 @@
+# Python build artifacts
+__pycache__/
+*.pyc
+
+# Large trained checkpoint (862MB, exceeds GitHub's 100MB file limit).
+# Available on request; see outputs/checkpoints/README.md for details.
+outputs/checkpoints/spectra_ckpt.pkl
+
+# OS / editor metadata
+desktop.ini
+.DS_Store
+
+# Local tool configuration (not part of the project)
+.claude/

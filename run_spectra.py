@@ -19,7 +19,7 @@ Usage
   python run_spectra.py --reset
 
   # Use a different config
-  python run_spectra.py --config my_config.yaml
+  python run_spectra.py --config configs/my_config.yaml
 """
 
 import argparse
@@ -65,8 +65,8 @@ def setup_logging(log_dir: str = "outputs") -> logging.Logger:
 
 def main():
     parser = argparse.ArgumentParser(description="SPECTRA Bitcoin Transaction Analysis")
-    parser.add_argument("--config", type=str, default="config.yaml",
-                        help="Path to config.yaml")
+    parser.add_argument("--config", type=str, default="configs/config.yaml",
+                        help="Path to config YAML file")
     parser.add_argument("--phase", type=str, default="all",
                         choices=["all", "data", "spectra", "baselines", "ablation",
                                  "figures", "results"],
@@ -88,7 +88,7 @@ def main():
     logger.info("=" * 70)
     logger.info("  SPECTRA — Spectral-Probabilistic Ensemble Clustering")
     logger.info("  for Transaction Recognition and Authentication")
-    logger.info("  Author: Sagar Korde | Target: IEEE TIFS")
+    logger.info("  Author: Sagar Korde")
     logger.info("=" * 70)
     logger.info("Config: %s | Phase: %s", args.config, args.phase)
     logger.info("Device: %s | CUDA: %s",

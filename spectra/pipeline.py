@@ -10,7 +10,7 @@ Orchestrates all modules in the correct order and writes all outputs:
 Usage
 -----
 from spectra.pipeline import SPECTRAPipeline
-pipeline = SPECTRAPipeline("config.yaml")
+pipeline = SPECTRAPipeline("configs/config.yaml")
 results  = pipeline.run()
 """
 
@@ -86,7 +86,7 @@ class SPECTRAPipeline:
 
     CLASS_NAMES = ["Standard", "P2P", "Consolidation", "Distribution", "BatchPayment", "CoinJoin"]
 
-    def __init__(self, config_path: str = "config.yaml"):
+    def __init__(self, config_path: str = "configs/config.yaml"):
         with open(config_path) as f:
             self.cfg = yaml.safe_load(f)
 

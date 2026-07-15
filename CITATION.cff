@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "SPECTRA: Spectral-Probabilistic Ensemble Clustering for Bitcoin Transaction Recognition and Authentication"
+type: software
+authors:
+  - family-names: Korde
+    given-names: Sagar D.
+    email: sagarkorde04@gmail.com
+  - family-names: Shekokar
+    given-names: Narendra M.
+license: MIT
+repository-code: "https://github.com/sagarkorde/SPECTRA"
+references:
+  - type: dataset
+    title: "Bitcoin Blockchain Transaction Dataset for Wallet Address Profiling and Behavioral Analysis (Parquet Format)"
+    authors:
+      - family-names: Korde
+        given-names: Sagar D.
+      - family-names: Shekokar
+        given-names: Narendra M.
+      - family-names: Siddavatam
+        given-names: Irfan
+    doi: "10.21227/bxmt-mn56"

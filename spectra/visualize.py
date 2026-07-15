@@ -1,6 +1,6 @@
 """
-SPECTRA — Publication-Ready Figure Generation (IEEE TIFS format)
-================================================================
+SPECTRA — Publication-Ready Figure Generation
+==============================================
 All figures: 300 DPI, Times New Roman font, IEEE column widths.
 Saved as both PDF and PNG in outputs/figures/.
 

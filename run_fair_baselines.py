@@ -194,7 +194,7 @@ def main():
         run_kmeans, run_plain_hdbscan, run_xgboost,
     )
     import yaml
-    with open("config.yaml") as f:
+    with open("configs/config.yaml") as f:
         cfg = yaml.safe_load(f)
     cfg_bl = cfg["baselines"]
 

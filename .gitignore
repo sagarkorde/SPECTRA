@@ -19,6 +19,10 @@ data/*.csv
 *.bst
 *.cls
 SPECTRA_overleaf/
+SPECTRA_new_references_bibtex_doi.txt
+SPECTRA_novelty_statement.txt
+SPECTRA_updated_reference_list_IEEEtran.txt
+spectra_acronym_breakdown.svg
 
 # OS / editor metadata
 desktop.ini

@@ -260,28 +260,18 @@ def train_classifier(
 # EVALUATION
 # ─────────────────────────────────────────────────────────────────────────────
 
-def evaluate_classifier(
-    model:  SPECTRAClassifier,
-    data:   "Data",
-    mask:   torch.Tensor,
-    device: Optional[torch.device] = None,
-) -> Dict[str, float]:
-    """Return classification metrics on the nodes specified by mask."""
+def classification_metrics_from_arrays(y_true: np.ndarray, probs: np.ndarray) -> Dict[str, float]:
+    """Same metric set as evaluate_classifier, computed directly from raw
+    y_true/probs arrays rather than a node-mask on a PyG Data object — used
+    for transaction-level re-scoring where predictions are aggregated across
+    addresses rather than read off a single node index."""
     from sklearn.metrics import (
         accuracy_score, f1_score, matthews_corrcoef,
         precision_score, recall_score, roc_auc_score,
         average_precision_score,
     )
 
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.eval().to(device)
-    data = data.to(device)
-
-    ei = data.edge_index if model.use_graph else None
-    with torch.no_grad():
-        probs  = model.predict_proba(data.x, ei)[mask].cpu().numpy()
-        y_pred = probs.argmax(axis=1)
-        y_true = data.y[mask].cpu().numpy()
+    y_pred = probs.argmax(axis=1)
 
     metrics: Dict[str, float] = {}
     metrics["accuracy"]          = float(accuracy_score(y_true, y_pred))
@@ -308,6 +298,25 @@ def evaluate_classifier(
         metrics["auc_pr"] = float("nan")
 
     return metrics
+
+
+def evaluate_classifier(
+    model:  SPECTRAClassifier,
+    data:   "Data",
+    mask:   torch.Tensor,
+    device: Optional[torch.device] = None,
+) -> Dict[str, float]:
+    """Return classification metrics on the nodes specified by mask."""
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.eval().to(device)
+    data = data.to(device)
+
+    ei = data.edge_index if model.use_graph else None
+    with torch.no_grad():
+        probs  = model.predict_proba(data.x, ei)[mask].cpu().numpy()
+        y_true = data.y[mask].cpu().numpy()
+
+    return classification_metrics_from_arrays(y_true, probs)
 
 
 def full_evaluation(

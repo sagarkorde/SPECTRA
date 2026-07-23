@@ -1,0 +1,136 @@
+# =============================================================================
+#  SPECTRA — Configuration File
+#  Spectral-Probabilistic Ensemble Clustering for Transaction Recognition
+#  and Authentication
+#  Author : Sagar Korde
+# =============================================================================
+
+# ── Reproducibility ──────────────────────────────────────────────────────────
+seed: 42
+
+# ── Dataset ──────────────────────────────────────────────────────────────────
+# Download the dataset (see data/DATASET.md) and place it at the path below,
+# or update this path to point to your local copy.
+data:
+  path: "data/spectra_dataset.parquet"
+  sample_n: 300000          # rows sampled for ML (stratified by tx type)
+  graph_sample_n: 300000    # rows used for graph / spectral construction
+  max_graph_nodes: 30000    # cap: keep top-N nodes by degree after graph build
+  train_frac: 0.70
+  val_frac:   0.15
+  test_frac:  0.15
+
+# ── Feature engineering ───────────────────────────────────────────────────────
+features:
+  # Columns to DROP before any ML step
+  always_zero_cols:
+    - is_self_transfer
+    - has_p2pk
+    - has_p2pkh
+    - has_p2sh
+    - has_p2wpkh
+    - has_p2wsh
+    - has_taproot
+    - address_reuse
+    - output_script_count   # always 1
+  identifier_cols:
+    - txid
+    - input_addresses
+    - output_addresses
+    - input_script_types
+    - output_script_types
+    - op_return_data
+    - month_1
+    - timestamp
+  top_k_mi: 20              # keep top-k features by mutual information
+
+# ── Module S — Spectral Graph ─────────────────────────────────────────────────
+graph:
+  k_eigenvectors: 10        # top-k eigenvectors of graph Laplacian
+  laplacian_type: "normalized"   # "unnormalized" | "normalized"
+  velocity_window_days: 7   # window for tx velocity computation
+
+# ── Module E/C — VAE ─────────────────────────────────────────────────────────
+vae:
+  latent_dim: 16
+  hidden_dims: [128, 64]
+  dropout: 0.2
+  lr: 0.001
+  batch_size: 512
+  epochs: 50
+  beta_kl: 1.0              # weight on KL divergence term in ELBO
+  anomaly_percentile: 95    # reconstruction error threshold for anomaly flagging
+
+# ── Module E/C — NMF ─────────────────────────────────────────────────────────
+nmf:
+  n_components: 10
+  max_iter: 300
+  alpha_W: 0.1
+  l1_ratio: 0.5
+
+# ── Module E/C — HDBSCAN ──────────────────────────────────────────────────────
+hdbscan:
+  min_cluster_size: 100
+  min_samples: 10
+  cluster_selection_epsilon: 0.0
+  metric: "euclidean"
+
+# ── Module E/C — Wasserstein Drift ───────────────────────────────────────────
+drift:
+  window: "month"           # "week" | "month" | "quarter"
+  alert_threshold: 0.1      # Wasserstein distance δ above which drift is flagged
+
+# ── Module P/T — Bayesian Trust ───────────────────────────────────────────────
+bayesian:
+  alpha_prior: 2.0          # Beta(alpha, beta) prior shape
+  beta_prior: 2.0
+  likelihood_scale: 1.0
+
+# ── Module P/T — Markov Chain ─────────────────────────────────────────────────
+markov:
+  smoothing: 0.000001        # Laplace smoothing for zero-count transitions
+  stationarity_tol: 0.00000001  # convergence tolerance for power iteration
+
+# ── Module R — GNN Classifier (GraphSAGE-based) ───────────────────────────────
+# Choice rationale: GraphSAGE chosen over GAT because (1) the address graph
+# is large and sparse — SAGEConv scales better via neighborhood sampling;
+# (2) attention weights add complexity without proven benefit on non-attributed
+# sparse Bitcoin graphs; (3) inductive learning enables generalization to
+# unseen addresses at inference time.
+gnn:
+  model: "GraphSAGE"        # "GraphSAGE" | "GAT"
+  hidden_dim: 128
+  embed_dim: 64
+  num_layers: 2
+  dropout: 0.3
+  lr: 0.001
+  weight_decay: 0.0001
+  epochs: 100
+  patience: 15              # early stopping
+
+# ── Baselines ─────────────────────────────────────────────────────────────────
+baselines:
+  kmeans_k: 6               # matches number of transaction type classes
+  dbscan_eps: 0.5
+  dbscan_min_samples: 10
+  isolation_forest_contamination: 0.05
+  autoencoder_hidden: [64, 32]
+  autoencoder_epochs: 30
+  xgboost_n_estimators: 300
+  xgboost_max_depth: 6
+  xgboost_lr: 0.05
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+# NOTE: all paths below point at a separate "fixed_labels" tree (node-label
+# majority-vote fix + transaction-level eval fix) so this rerun never
+# overwrites the original outputs/checkpoints/spectra_ckpt.pkl or the
+# outputs_fixed_eval/ tree from the eval-only fix.
+output:
+  dir: "outputs_vae_ld16"
+  figures_dir: "outputs_vae_ld16/figures"
+  checkpoints_dir: "outputs/checkpoints_vae_ld16"
+  results_csv: "outputs_vae_ld16/results_table.csv"
+  results_tex: "outputs_vae_ld16/results_table.tex"
+  figure_dpi: 300
+  figure_width_single: 3.5  # IEEE single-column (inches)
+  figure_width_double: 7.0  # IEEE double-column (inches)

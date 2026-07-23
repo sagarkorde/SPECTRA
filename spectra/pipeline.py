@@ -78,6 +78,73 @@ class Checkpoint:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# NODE -> TRANSACTION PREDICTION MAPPING
+# ─────────────────────────────────────────────────────────────────────────────
+
+def build_majority_node_labels(df, node_index, y, n_nodes):
+    """Assign each graph node (address) a label via majority vote across all
+    transactions whose input addresses map to that node.
+
+    BUG THIS REPLACES: the original inline code did
+    `node_labels[node_index[addr]] = int(y[i])` inside a loop over all
+    transactions, which is a last-write-wins overwrite - only the LAST
+    transaction touching a given address (in df row order) determined that
+    node's label, discarding every earlier one. High-degree hub addresses
+    (exchanges, mixers) participate in many different transaction types, so
+    a single arbitrary label per node made the node-classification task
+    only weakly related to the real per-transaction labels, which is why
+    node-level accuracy (~91%) collapsed to near-chance (~18%) once
+    predictions were honestly re-scored against real transaction-level
+    labels via map_node_probs_to_tx.
+    """
+    from collections import Counter
+    from spectra.graph import _parse_address_list
+
+    counts = [Counter() for _ in range(n_nodes)]
+    for i in range(len(df)):
+        for addr in _parse_address_list(df.iloc[i]["input_addresses"]):
+            if addr in node_index:
+                counts[node_index[addr]][int(y[i])] += 1
+
+    node_labels = np.zeros(n_nodes, dtype=np.int64)
+    for nid, counter in enumerate(counts):
+        if counter:
+            node_labels[nid] = counter.most_common(1)[0][0]
+    return node_labels
+
+
+def map_node_probs_to_tx(df, node_index, node_probs, idx_subset):
+    """Map per-node class-probability predictions to transaction-level
+    predictions via address matching: try input addresses first, then fall
+    back to output addresses, averaging over matched nodes; transactions
+    with no address in node_index (i.e. outside the pruned hub graph)
+    default to a uniform prior. This is the SAME address-matching logic used
+    to build gnn_probs_ts in phase2_spectra, factored out so it can also be
+    used to re-score other node-level models (e.g. ablation variants)
+    transaction-level for a fair, apples-to-apples comparison against the
+    tabular/baseline models, which are all evaluated on the full
+    transaction-level test set rather than a node-level split.
+    """
+    from spectra.graph import _parse_address_list
+
+    n_classes = node_probs.shape[1]
+    tx_proba = np.full((len(idx_subset), n_classes), 1.0 / n_classes, dtype=np.float32)
+    for j, i in enumerate(idx_subset):
+        row = df.iloc[i]
+        matched = []
+        for addr in _parse_address_list(row["input_addresses"]):
+            if addr in node_index:
+                matched.append(node_probs[node_index[addr]])
+        if not matched:
+            for addr in _parse_address_list(row["output_addresses"]):
+                if addr in node_index:
+                    matched.append(node_probs[node_index[addr]])
+        if matched:
+            tx_proba[j] = np.mean(matched, axis=0)
+    return tx_proba
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN PIPELINE CLASS
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -314,17 +381,41 @@ class SPECTRAPipeline:
         # ── 2b. HDBSCAN ───────────────────────────────────────────────────────
         logger.info("[Phase 2b] HDBSCAN clustering on latent space ...")
         t0 = time.perf_counter()
-        cluster_labels, soft_probs, hdb = run_hdbscan(
-            Z_all,
-            min_cluster_size=cfg_h["min_cluster_size"],
-            min_samples=cfg_h["min_samples"],
-            cluster_selection_epsilon=cfg_h["cluster_selection_epsilon"],
-            metric=cfg_h["metric"],
-            seed=self.seed,
-        )
+        if cfg_h.get("use_approximate", False):
+            from spectra.cluster import run_hdbscan_approximate
+            logger.info("[Phase 2b] Using approximate HDBSCAN (hdbscan.use_approximate=true) "
+                        "- exact HDBSCAN's O(n^2) mutual-reachability construction is "
+                        "infeasible at this row count (see Limitations).")
+            cluster_labels, soft_probs, hdb = run_hdbscan_approximate(
+                Z_all,
+                min_cluster_size=cfg_h["min_cluster_size"],
+                min_samples=cfg_h["min_samples"],
+                cluster_selection_epsilon=cfg_h["cluster_selection_epsilon"],
+                metric=cfg_h["metric"],
+                subsample_frac=cfg_h.get("approximate_subsample_frac", 0.1),
+                seed=self.seed,
+            )
+        else:
+            cluster_labels, soft_probs, hdb = run_hdbscan(
+                Z_all,
+                min_cluster_size=cfg_h["min_cluster_size"],
+                min_samples=cfg_h["min_samples"],
+                cluster_selection_epsilon=cfg_h["cluster_selection_epsilon"],
+                metric=cfg_h["metric"],
+                seed=self.seed,
+            )
         hdbscan_train_time = time.perf_counter() - t0
-        clust_metrics = clustering_metrics(Z_all, cluster_labels, y_true=y)
-        logger.info("[Phase 2b] Cluster metrics: %s", clust_metrics)
+        # IMPORTANT: evaluate on idx_ts only, matching the population every
+        # clustering baseline (PlainHDBSCAN, KMeans, DBSCAN, etc.) is scored
+        # on in phase3_baselines (X_ts/y_ts, 45,001 rows) - NOT all 300,000
+        # rows the HDBSCAN model was fit on. Fitting on the full set is fine
+        # (unsupervised), but comparing quality metrics computed over 300,000
+        # rows against baselines' metrics computed over a 45,001-row subset
+        # is not a fair like-for-like comparison. The full-population version
+        # is kept under clust_metrics_full_population for transparency.
+        clust_metrics = clustering_metrics(Z_all[idx_ts], cluster_labels[idx_ts], y_true=y[idx_ts])
+        clust_metrics_full_population = clustering_metrics(Z_all, cluster_labels, y_true=y)
+        logger.info("[Phase 2b] Cluster metrics (test-only): %s", clust_metrics)
 
         # ── 2c. Wasserstein drift ─────────────────────────────────────────────
         logger.info("[Phase 2c] Wasserstein drift detection ...")
@@ -391,12 +482,7 @@ class SPECTRAPipeline:
         ]).astype(np.float32)
 
         # Node labels = majority transaction type for each address
-        node_labels = np.zeros(n_nodes, dtype=np.int64)
-        for i in range(len(df)):
-            addrs = _parse_address_list(df.iloc[i]["input_addresses"])
-            for addr in addrs:
-                if addr in node_index:
-                    node_labels[node_index[addr]] = int(y[i])
+        node_labels = build_majority_node_labels(df, node_index, y, n_nodes)
 
         # Edge index from NetworkX graph
         edges   = list(G.edges())
@@ -453,24 +539,10 @@ class SPECTRAPipeline:
         with torch.no_grad():
             gnn_probs_all = gnn.predict_proba(gnn_x_t, data_pyg.edge_index).cpu().numpy()
 
-        # Map node predictions back to transaction indices.
-        # Try all input addresses first, then fall back to output addresses,
-        # then average over all matched nodes for transactions with multiple
-        # addresses in the graph (reduces sensitivity to single-node noise).
-        tx_proba = np.zeros((len(df), 6), dtype=np.float32)
-        tx_proba[:] = 1.0 / 6  # uniform default for unmatched transactions
-        for i in range(len(df)):
-            row = df.iloc[i]
-            matched = []
-            for addr in _parse_address_list(row["input_addresses"]):
-                if addr in node_index:
-                    matched.append(gnn_probs_all[node_index[addr]])
-            if not matched:
-                for addr in _parse_address_list(row["output_addresses"]):
-                    if addr in node_index:
-                        matched.append(gnn_probs_all[node_index[addr]])
-            if matched:
-                tx_proba[i] = np.mean(matched, axis=0)
+        # Map node predictions back to transaction indices (input addresses
+        # first, else output addresses, else uniform prior for transactions
+        # with no address in the pruned hub graph).
+        tx_proba = map_node_probs_to_tx(df, node_index, gnn_probs_all, np.arange(len(df)))
 
         out = {
             "vae": vae,
@@ -484,6 +556,7 @@ class SPECTRAPipeline:
             "cluster_labels": cluster_labels,
             "soft_probs": soft_probs,
             "clust_metrics": clust_metrics,
+            "clust_metrics_full_population": clust_metrics_full_population,
             "hdbscan_train_time": hdbscan_train_time,
             "win_keys": win_keys,
             "drift_scores": drift_scores,
@@ -584,10 +657,15 @@ class SPECTRAPipeline:
             X_tr, y_tr, X_vl, y_vl, X_ts, y_ts, seed=self.seed
         )
 
-        logger.info("[Phase 3] B8 BERT4ETH ...")
-        results["BERT4ETH"] = run_bert4eth(
-            X_tr, y_tr, X_vl, y_vl, X_ts, y_ts, seed=self.seed
-        )
+        if cfg_bl.get("skip_bert4eth", False):
+            logger.info("[Phase 3] B8 BERT4ETH ... SKIPPED (baselines.skip_bert4eth=true; "
+                        "its transformer-over-tabular-features training time scales worse "
+                        "than linearly with row count and dominates full-dataset runtime)")
+        else:
+            logger.info("[Phase 3] B8 BERT4ETH ...")
+            results["BERT4ETH"] = run_bert4eth(
+                X_tr, y_tr, X_vl, y_vl, X_ts, y_ts, seed=self.seed
+            )
 
         logger.info("[Phase 3] B9 Graph Autoencoder ...")
         results["GraphAE"] = run_graph_autoencoder(
@@ -600,13 +678,25 @@ class SPECTRAPipeline:
             X_tr, y_tr, X_vl, y_vl, X_ts, y_ts, seed=self.seed
         )
 
-        # Add SPECTRA-full to results for joint comparison
+        # Add SPECTRA-full to results for joint comparison.
+        # IMPORTANT: metrics are computed transaction-level (from y_pred/y_proba
+        # below, honest 1/6-uniform fallback for the ~78.5% of test transactions
+        # with no address in the pruned hub graph included), NOT copied from
+        # gnn_metrics["test"] (a node-level evaluation restricted to the hub
+        # graph's own ~4,500-node test split). Every other model in `results`
+        # above is scored on the full transaction-level test set (X_ts/y_ts),
+        # so this keeps SPECTRA comparable to them on the same population.
+        # The node-level number is kept under metrics_node_level for reference.
+        from spectra.classifier import classification_metrics_from_arrays
+        y_pred_tx  = p2["gnn_probs_ts"].argmax(axis=1)
+        tx_metrics = classification_metrics_from_arrays(y_ts, p2["gnn_probs_ts"])
+        tx_metrics["train_time_s"] = p2["gnn_train_time"]
+        tx_metrics["inference_ms"] = 0.0
         results["SPECTRA"] = {
-            "y_pred":  p2["gnn_probs_ts"].argmax(axis=1),
+            "y_pred":  y_pred_tx,
             "y_proba": p2["gnn_probs_ts"],
-            "metrics": {**p2["gnn_metrics"]["test"],
-                        "train_time_s": p2["gnn_train_time"],
-                        "inference_ms": 0.0},
+            "metrics": tx_metrics,
+            "metrics_node_level": p2["gnn_metrics"]["test"],
         }
 
         self.ckpt.put("phase3", results)
@@ -657,11 +747,7 @@ class SPECTRAPipeline:
         valid    = (edge_src < n_nodes) & (edge_dst < n_nodes)
         edge_src = edge_src[valid]; edge_dst = edge_dst[valid]
 
-        node_labels = np.zeros(n_nodes, dtype=np.int64)
-        for i in range(len(df)):
-            for addr in _parse_address_list(df.iloc[i]["input_addresses"]):
-                if addr in node_index:
-                    node_labels[node_index[addr]] = int(y[i])
+        node_labels = build_majority_node_labels(df, node_index, y, n_nodes)
 
         rng_n = np.random.default_rng(self.seed)
         all_nids = np.arange(n_nodes); rng_n.shuffle(all_nids)
@@ -715,7 +801,26 @@ class SPECTRAPipeline:
                 lr=cfg_c["lr"], weight_decay=cfg_c["weight_decay"],
                 device=self.device, patience=10, seed=self.seed,
             )
-            return full_evaluation(gnn_v, data_v, self.device)["test"]
+            node_metrics = full_evaluation(gnn_v, data_v, self.device)["test"]
+
+            # Transaction-level re-scoring (same address-matching + uniform-
+            # fallback logic as phase2/phase3's "SPECTRA" entry) so ablation
+            # variants are comparable to the full-transaction-level baselines
+            # rather than only to each other on the easier hub-node subset.
+            from spectra.classifier import classification_metrics_from_arrays
+            gnn_v.eval().to(self.device)
+            data_v_dev = data_v.to(self.device)
+            with torch.no_grad():
+                all_probs = gnn_v.predict_proba(
+                    data_v_dev.x,
+                    data_v_dev.edge_index if use_graph else None,
+                ).cpu().numpy()
+            tx_proba  = map_node_probs_to_tx(df, node_index, all_probs, idx_ts)
+            tx_metrics = classification_metrics_from_arrays(p1["y_ts"], tx_proba)
+
+            # Top-level keys stay transaction-level (comparable to baselines);
+            # node-level kept alongside for transparency/diagnostics.
+            return {**tx_metrics, "metrics_node_level": node_metrics}
 
         ablation: Dict[str, Dict] = {}
 
@@ -775,11 +880,8 @@ class SPECTRAPipeline:
         Z_all   = p2["Z_all"]
         y_all   = p1["y"]
 
-        viz.fig1_tsne_comparison(
-            p1["X_sel"], Z_all, y_all, out_dir=out_dir, seed=self.seed
-        )
-        viz.fig2_vae_latent(
-            Z_all, y_all, p2["recon_all"], out_dir=out_dir, seed=self.seed
+        viz.fig1_latent_space_overview(
+            p1["X_sel"], Z_all, y_all, p2["recon_all"], out_dir=out_dir, seed=self.seed
         )
         viz.fig3_roc_curves(
             {k: v for k, v in p3.items() if v.get("y_proba") is not None},

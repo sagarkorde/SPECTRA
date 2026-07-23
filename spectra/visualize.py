@@ -87,104 +87,79 @@ def _save(fig: plt.Figure, name: str, out_dir: str = "outputs/figures"):
 # FIG 1 — t-SNE / UMAP COMPARISON (raw vs SPECTRA)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def fig1_tsne_comparison(
+def fig1_latent_space_overview(
     X_raw:     np.ndarray,
     Z_spectra: np.ndarray,
     labels:    np.ndarray,
+    recon_errors: np.ndarray,
     out_dir:   str = "outputs/figures",
     method:    str = "umap",
     n_sample:  int = 5000,
     seed:      int = 42,
 ):
-    """Side-by-side embedding: raw features vs SPECTRA latent space."""
+    """Three-panel latent-space overview: raw-feature UMAP, VAE-latent UMAP
+    colored by transaction type, and the SAME VAE-latent UMAP colored by
+    reconstruction error (anomaly score). Replaces the former separate
+    fig1_tsne_comparison/fig2_vae_latent pair, whose middle/left panels
+    respectively were the same VAE-latent-UMAP-by-tx-type plot computed
+    twice from independent UMAP fits."""
     _setup()
     from sklearn.preprocessing import StandardScaler
 
     rng = np.random.default_rng(seed)
     idx = rng.choice(len(X_raw), size=min(n_sample, len(X_raw)), replace=False)
-    X_r, Z_s, lbl = X_raw[idx], Z_spectra[idx], labels[idx]
+    X_r, Z_s, lbl, err_s = X_raw[idx], Z_spectra[idx], labels[idx], recon_errors[idx]
 
     scaler = StandardScaler()
     X_r_sc = scaler.fit_transform(X_r)
 
     if method.lower() == "umap":
         from umap import UMAP
-        emb_raw     = UMAP(n_components=2, random_state=seed).fit_transform(X_r_sc)
-        emb_spectra = UMAP(n_components=2, random_state=seed).fit_transform(Z_s)
+        emb_raw = UMAP(n_components=2, random_state=seed).fit_transform(X_r_sc)
+        emb_vae = UMAP(n_components=2, random_state=seed).fit_transform(Z_s)
         method_name = "UMAP"
     else:
         from sklearn.manifold import TSNE
-        emb_raw     = TSNE(n_components=2, random_state=seed, perplexity=40).fit_transform(X_r_sc)
-        emb_spectra = TSNE(n_components=2, random_state=seed, perplexity=40).fit_transform(Z_s)
+        emb_raw = TSNE(n_components=2, random_state=seed, perplexity=40).fit_transform(X_r_sc)
+        emb_vae = TSNE(n_components=2, random_state=seed, perplexity=40).fit_transform(Z_s)
         method_name = "t-SNE"
 
-    fig, axes = plt.subplots(1, 2, figsize=(W_DOUBLE, 3.0))
-    for ax, emb, title in [
-        (axes[0], emb_raw,     f"{method_name} — Raw Features"),
-        (axes[1], emb_spectra, f"{method_name} — SPECTRA Embedding"),
-    ]:
-        for cls, name in TX_TYPE_NAMES.items():
-            m = lbl == cls
-            if m.sum() == 0:
-                continue
-            ax.scatter(emb[m, 0], emb[m, 1], s=4, alpha=0.5,
-                       color=PALETTE[cls], label=name, rasterized=True)
-        ax.set_title(title)
-        ax.set_xlabel(f"{method_name}-1")
-        ax.set_ylabel(f"{method_name}-2")
+    fig, axes = plt.subplots(1, 3, figsize=(W_DOUBLE, 3.0))
+
+    ax = axes[0]
+    for cls, name in TX_TYPE_NAMES.items():
+        m = lbl == cls
+        if m.sum() == 0:
+            continue
+        ax.scatter(emb_raw[m, 0], emb_raw[m, 1], s=4, alpha=0.5,
+                   color=PALETTE[cls], label=name, rasterized=True)
+    ax.set_title(f"{method_name} — Raw Features")
+    ax.set_xlabel(f"{method_name}-1"); ax.set_ylabel(f"{method_name}-2")
+
+    ax = axes[1]
+    for cls, name in TX_TYPE_NAMES.items():
+        m = lbl == cls
+        if m.sum() == 0:
+            continue
+        ax.scatter(emb_vae[m, 0], emb_vae[m, 1], s=4, alpha=0.5,
+                   color=PALETTE[cls], label=name, rasterized=True)
+    ax.set_title(f"{method_name} — VAE Latent (Tx Type)")
+    ax.set_xlabel(f"{method_name}-1"); ax.set_ylabel(f"{method_name}-2")
+
+    ax = axes[2]
+    sc = ax.scatter(emb_vae[:, 0], emb_vae[:, 1], c=err_s, s=4, alpha=0.6,
+                     cmap="hot_r", vmin=np.percentile(err_s, 5),
+                     vmax=np.percentile(err_s, 95), rasterized=True)
+    cb = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cb.set_label("Reconstruction Error", fontsize=8)
+    ax.set_title(f"{method_name} — VAE Latent (Anomaly Score)")
+    ax.set_xlabel(f"{method_name}-1"); ax.set_ylabel(f"{method_name}-2")
 
     handles = [mpatches.Patch(color=PALETTE[c], label=n) for c, n in TX_TYPE_NAMES.items()]
     fig.legend(handles=handles, loc="lower center", ncol=6,
                bbox_to_anchor=(0.5, -0.06), frameon=False)
     fig.tight_layout()
-    _save(fig, "fig1_tsne_comparison", out_dir)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# FIG 2 — VAE LATENT SPACE
-# ─────────────────────────────────────────────────────────────────────────────
-
-def fig2_vae_latent(
-    Z:       np.ndarray,
-    labels:  np.ndarray,
-    recon_errors: np.ndarray,
-    out_dir: str = "outputs/figures",
-    n_sample: int = 5000,
-    seed: int = 42,
-):
-    """VAE latent space (2-D UMAP projection), colored by cluster and anomaly score."""
-    _setup()
-    rng = np.random.default_rng(seed)
-    idx = rng.choice(len(Z), size=min(n_sample, len(Z)), replace=False)
-    Z_s, lbl_s, err_s = Z[idx], labels[idx], recon_errors[idx]
-
-    from umap import UMAP
-    emb = UMAP(n_components=2, random_state=seed).fit_transform(Z_s)
-
-    fig, axes = plt.subplots(1, 2, figsize=(W_DOUBLE, 3.0))
-
-    # Left: color by cluster type
-    for cls, name in TX_TYPE_NAMES.items():
-        m = lbl_s == cls
-        if m.sum() == 0: continue
-        axes[0].scatter(emb[m, 0], emb[m, 1], s=4, alpha=0.5,
-                        color=PALETTE[cls], label=name, rasterized=True)
-    axes[0].set_title("VAE Latent — Transaction Type")
-    axes[0].set_xlabel("UMAP-1"); axes[0].set_ylabel("UMAP-2")
-    handles = [mpatches.Patch(color=PALETTE[c], label=n) for c, n in TX_TYPE_NAMES.items()]
-    axes[0].legend(handles=handles, fontsize=7, markerscale=2)
-
-    # Right: color by reconstruction error (anomaly score)
-    sc = axes[1].scatter(emb[:, 0], emb[:, 1], c=err_s, s=4, alpha=0.6,
-                         cmap="hot_r", vmin=np.percentile(err_s, 5),
-                         vmax=np.percentile(err_s, 95), rasterized=True)
-    cb = fig.colorbar(sc, ax=axes[1], fraction=0.046, pad=0.04)
-    cb.set_label("Reconstruction Error", fontsize=8)
-    axes[1].set_title("VAE Latent — Anomaly Score")
-    axes[1].set_xlabel("UMAP-1"); axes[1].set_ylabel("UMAP-2")
-
-    fig.tight_layout()
-    _save(fig, "fig2_vae_latent", out_dir)
+    _save(fig, "fig1_latent_space_overview", out_dir)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

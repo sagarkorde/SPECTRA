@@ -81,6 +81,65 @@ def run_hdbscan(
     return labels.astype(np.int32), soft_probs, clusterer
 
 
+def run_hdbscan_approximate(
+    Z: np.ndarray,
+    min_cluster_size: int = 100,
+    min_samples: int = 10,
+    cluster_selection_epsilon: float = 0.0,
+    metric: str = "euclidean",
+    subsample_frac: float = 0.1,
+    seed: int = 42,
+) -> Tuple[np.ndarray, np.ndarray, hdbscan.HDBSCAN]:
+    """Approximate HDBSCAN for the O(n^2)-memory limitation (Limitations,
+    item 3): fit exact HDBSCAN on a random subsample of size
+    `subsample_frac * n` (mutual-reachability graph stays subsample-sized,
+    not full-n-sized), then assign every remaining point via
+    `hdbscan.approximate_predict` (nearest-exemplar lookup, no new O(n^2)
+    computation). Returns labels/soft_probs for ALL n points, in the same
+    original order as Z, so it is a drop-in replacement for run_hdbscan's
+    output shape.
+    """
+    n = len(Z)
+    rng = np.random.default_rng(seed)
+    sub_idx = rng.choice(n, size=max(min_cluster_size * 2, int(n * subsample_frac)), replace=False)
+    sub_mask = np.zeros(n, dtype=bool)
+    sub_mask[sub_idx] = True
+    rest_idx = np.where(~sub_mask)[0]
+
+    logger.info(
+        "[Module C] Approximate HDBSCAN — fitting on %d/%d points (%.1f%%), "
+        "approximate_predict for the remaining %d ...",
+        len(sub_idx), n, 100 * len(sub_idx) / n, len(rest_idx),
+    )
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        cluster_selection_epsilon=cluster_selection_epsilon,
+        metric=metric,
+        prediction_data=True,
+        core_dist_n_jobs=-1,
+    )
+    sub_labels = clusterer.fit_predict(Z[sub_idx])
+
+    labels = np.full(n, -1, dtype=np.int32)
+    soft_probs = np.zeros(n, dtype=np.float32)
+    labels[sub_idx] = sub_labels
+    soft_probs[sub_idx] = clusterer.probabilities_.astype(np.float32)
+
+    if len(rest_idx) > 0:
+        rest_labels, rest_strengths = hdbscan.approximate_predict(clusterer, Z[rest_idx])
+        labels[rest_idx] = rest_labels
+        soft_probs[rest_idx] = rest_strengths.astype(np.float32)
+
+    n_clusters = len(set(labels.tolist())) - (1 if -1 in labels else 0)
+    n_noise = int((labels == -1).sum())
+    logger.info(
+        "[Module C] Approximate HDBSCAN found %d clusters | noise points: %d (%.1f%%)",
+        n_clusters, n_noise, 100 * n_noise / n,
+    )
+    return labels, soft_probs, clusterer
+
+
 def cluster_summary(labels: np.ndarray) -> Dict[int, int]:
     """Return {cluster_id: count} dict (noise = -1)."""
     return dict(Counter(labels.tolist()))
